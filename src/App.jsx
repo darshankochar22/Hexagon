@@ -13,15 +13,16 @@ import ProtectedRoute from './components/ProtectedRoute.jsx'
 import { AppleCardsCarouselDemo } from './components/ui/Applecards.jsx'
 import { Routes, Route, Outlet, useLocation } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { IconPlaceholder } from '@tabler/icons-react'
 
 function Layout() {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
   
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main>
+      <main className="flex-1">
         <Outlet />
         {isHomePage && (
           <>

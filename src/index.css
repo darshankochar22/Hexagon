@@ -185,7 +185,7 @@ html, body, #root {
 @media (max-width: 520px) {
   .spotlight-beam { height: 46vh; filter: blur(14px); opacity: 0.7; }
 }
-.page-spacer { flex: 1 1 auto; }
+/* Footer will now stick to bottom using flexbox layout */
 
 .landing-video { display: none; }
 .landing-video-media { display: none; }
