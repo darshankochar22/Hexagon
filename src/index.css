@@ -2526,3 +2526,162 @@ html, body, #root {
     padding: 1.5rem;
   }
 }
+/* Header Hero Section */
+.header-hero {
+  position: relative;
+  width: 100%;
+  height: 100vh; /* Full viewport height */
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Background Effects */
+.bg-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 50px 50px;
+  opacity: 0.3;
+}
+
+.bg-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.1) 1px, transparent 0);
+  background-size: 20px 20px;
+  opacity: 0.2;
+}
+
+/* Spotlight Effects */
+.spotlight-beam {
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  width: 200px;
+  height: 200vh;
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.1) 0%,
+    rgba(255,255,255,0.05) 30%,
+    transparent 60%
+  );
+  transform: translateX(-50%) rotate(-15deg);
+  pointer-events: none;
+}
+
+.spotlight-beam--soft {
+  width: 300px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.05) 0%,
+    rgba(255,255,255,0.02) 40%,
+    transparent 70%
+  );
+  transform: translateX(-50%) rotate(10deg);
+}
+
+.spotlight-beam--right {
+  left: 70%;
+  width: 150px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.08) 0%,
+    rgba(255,255,255,0.03) 35%,
+    transparent 65%
+  );
+  transform: translateX(-50%) rotate(25deg);
+}
+
+/* Header Content */
+.header-inner {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  padding: 2rem;
+  max-width: 100%;
+}
+
+.header-title {
+  font-size: clamp(3rem, 15vw, 12rem);
+  font-weight: 800;
+  line-height: 0.9;
+  margin-bottom: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.header-title--gradient {
+  background: linear-gradient(
+    135deg,
+    #ffffff 0%,
+    #e5e5e5 25%,
+    #ffffff 50%,
+    #d1d1d1 75%,
+    #ffffff 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% 200%;
+  animation: gradientShift 4s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.header-sub {
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  color: #a0a0a0;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .header-hero {
+    height: 100vh;
+    padding: 1rem;
+  }
+  
+  .header-inner {
+    padding: 1rem;
+  }
+  
+  .spotlight-beam {
+    width: 150px;
+  }
+  
+  .spotlight-beam--soft {
+    width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-title {
+    margin-bottom: 1.5rem;
+  }
+  
+  .header-sub {
+    font-size: 1rem;
+  }
+}
+
