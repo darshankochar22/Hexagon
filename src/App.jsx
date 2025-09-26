@@ -11,6 +11,7 @@ import Profile from './components/pages/Profile.jsx'
 import Schedule from './components/pages/Schedule.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import { AppleCardsCarouselDemo } from './components/ui/Applecards.jsx'
+import TTSTest from './components/TTSTest.jsx'
 import { Routes, Route, Outlet, useLocation } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { IconPlaceholder } from '@tabler/icons-react'
@@ -57,6 +58,7 @@ function App() {
           <Route path="signup" element={<Signup />} />
           <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="schedule" element={<Schedule />} />
+          <Route path="tts-test" element={<TTSTest />} />
           <Route path="*" element={<></>} />
         </Route>
       </Routes>

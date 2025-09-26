@@ -19,64 +19,26 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [voiceLanguage, setVoiceLanguage] = useState('en-US')
   const [voiceEngine, setVoiceEngine] = useState('standard') // 'standard' | 'neural' | 'generative'
-  const currentAudioRef = useRef(null)
-  const ttsQueueRef = useRef([])
-
-  // Ensure Puter.js is loaded before attempting TTS
-  const ensurePuterLoaded = () => new Promise((resolve, reject) => {
-    if (typeof window !== 'undefined' && window.puter && window.puter.ai && window.puter.ai.txt2speech) {
-      resolve(true)
-      return
-    }
-    const existing = document.querySelector('script[src="https://js.puter.com/v2/"]')
-    if (existing) {
-      existing.addEventListener('load', () => resolve(true), { once: true })
-      existing.addEventListener('error', () => reject(new Error('Failed to load Puter.js')), { once: true })
-      return
-    }
-    const s = document.createElement('script')
-    s.src = 'https://js.puter.com/v2/'
-    s.async = true
-    s.onload = () => resolve(true)
-    s.onerror = () => reject(new Error('Failed to load Puter.js'))
-    document.body.appendChild(s)
-  })
 
   const stopSpeaking = () => {
-    try {
-      const a = currentAudioRef.current
-      if (a && typeof a.pause === 'function') {
-        a.pause()
-      }
-    } catch {
-      // no-op
-    }
-    currentAudioRef.current = null
-    ttsQueueRef.current = []
-  }
-
-  const playNextInQueue = () => {
-    if (!voiceEnabled) return
-    const next = ttsQueueRef.current.shift()
-    if (!next) return
-    currentAudioRef.current = next
-    try {
-      next.onended = () => {
-        currentAudioRef.current = null
-        playNextInQueue()
-      }
-      next.play()
-    } catch {
-      playNextInQueue()
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel()
     }
   }
 
   const speakWithPuter = async (text) => {
     try {
-      await ensurePuterLoaded()
+      console.log('Starting TTS for text:', text.substring(0, 100) + '...')
+  
+      if (!("speechSynthesis" in window)) {
+        throw new Error("Browser does not support SpeechSynthesis API")
+      }
+  
       const maxLen = 2500
       const chunks = []
       let remaining = text || ''
+  
+      // 🔹 split into chunks (like your original function)
       while (remaining.length > maxLen) {
         const slice = remaining.slice(0, maxLen)
         const lastPunct = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('\n'))
@@ -85,25 +47,48 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
         remaining = remaining.slice(cut)
       }
       if (remaining) chunks.push(remaining)
-
-      const opts = { language: voiceLanguage, engine: voiceEngine }
+  
+      console.log(`Split text into ${chunks.length} chunks`)
+  
       const audios = []
+  
       for (const c of chunks) {
         try {
-          const a = await window.puter.ai.txt2speech(c, opts)
-          if (a) audios.push(a)
-        } catch {
-          // skip failed chunk
+          console.log('Generating TTS for chunk:', c.substring(0, 50) + '...')
+  
+          const utterance = new SpeechSynthesisUtterance(c)
+          utterance.lang = voiceLanguage || "en-US"
+          utterance.rate = 1
+          utterance.pitch = 1
+          utterance.voice = speechSynthesis.getVoices().find(v => v.name === "Google US English") || null
+  
+          // Wrap utterance in a promise so it plays sequentially
+          const playPromise = new Promise((resolve, reject) => {
+            utterance.onend = resolve
+            utterance.onerror = reject
+          })
+  
+          window.speechSynthesis.speak(utterance)
+          await playPromise
+  
+          audios.push(utterance)
+          console.log('TTS chunk played successfully')
+        } catch (chunkError) {
+          console.error('Failed to generate/play TTS for chunk:', chunkError)
         }
       }
+  
       if (audios.length > 0) {
-        ttsQueueRef.current.push(...audios)
-        if (!currentAudioRef.current) playNextInQueue()
+        console.log(`Played ${audios.length} audio chunks successfully`)
+      } else {
+        console.warn('No audio chunks were spoken')
       }
-    } catch {
-      // ignore TTS errors to avoid disrupting chat
+    } catch (error) {
+      console.error('TTS Error:', error)
     }
   }
+  
+  
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -213,7 +198,10 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
 
       // Optional voice playback
       if (voiceEnabled && answer && answer.length < 3000) {
+        console.log('Triggering TTS for AI response:', answer.substring(0, 100) + '...')
         speakWithPuter(answer)
+      } else {
+        console.log('TTS skipped - voiceEnabled:', voiceEnabled, 'answer length:', answer?.length)
       }
     } catch (e) {
       const aiResponse = {
