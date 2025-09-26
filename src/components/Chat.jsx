@@ -16,6 +16,94 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
   const [showInput, setShowInput] = useState(false)
   const [chatHistory, setChatHistory] = useState([]) // {role, content}
   const messagesEndRef = useRef(null)
+  const [voiceEnabled, setVoiceEnabled] = useState(true)
+  const [voiceLanguage, setVoiceLanguage] = useState('en-US')
+  const [voiceEngine, setVoiceEngine] = useState('standard') // 'standard' | 'neural' | 'generative'
+  const currentAudioRef = useRef(null)
+  const ttsQueueRef = useRef([])
+
+  // Ensure Puter.js is loaded before attempting TTS
+  const ensurePuterLoaded = () => new Promise((resolve, reject) => {
+    if (typeof window !== 'undefined' && window.puter && window.puter.ai && window.puter.ai.txt2speech) {
+      resolve(true)
+      return
+    }
+    const existing = document.querySelector('script[src="https://js.puter.com/v2/"]')
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true), { once: true })
+      existing.addEventListener('error', () => reject(new Error('Failed to load Puter.js')), { once: true })
+      return
+    }
+    const s = document.createElement('script')
+    s.src = 'https://js.puter.com/v2/'
+    s.async = true
+    s.onload = () => resolve(true)
+    s.onerror = () => reject(new Error('Failed to load Puter.js'))
+    document.body.appendChild(s)
+  })
+
+  const stopSpeaking = () => {
+    try {
+      const a = currentAudioRef.current
+      if (a && typeof a.pause === 'function') {
+        a.pause()
+      }
+    } catch {
+      // no-op
+    }
+    currentAudioRef.current = null
+    ttsQueueRef.current = []
+  }
+
+  const playNextInQueue = () => {
+    if (!voiceEnabled) return
+    const next = ttsQueueRef.current.shift()
+    if (!next) return
+    currentAudioRef.current = next
+    try {
+      next.onended = () => {
+        currentAudioRef.current = null
+        playNextInQueue()
+      }
+      next.play()
+    } catch {
+      playNextInQueue()
+    }
+  }
+
+  const speakWithPuter = async (text) => {
+    try {
+      await ensurePuterLoaded()
+      const maxLen = 2500
+      const chunks = []
+      let remaining = text || ''
+      while (remaining.length > maxLen) {
+        const slice = remaining.slice(0, maxLen)
+        const lastPunct = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('\n'))
+        const cut = lastPunct > 500 ? lastPunct + 1 : maxLen
+        chunks.push(remaining.slice(0, cut))
+        remaining = remaining.slice(cut)
+      }
+      if (remaining) chunks.push(remaining)
+
+      const opts = { language: voiceLanguage, engine: voiceEngine }
+      const audios = []
+      for (const c of chunks) {
+        try {
+          const a = await window.puter.ai.txt2speech(c, opts)
+          if (a) audios.push(a)
+        } catch {
+          // skip failed chunk
+        }
+      }
+      if (audios.length > 0) {
+        ttsQueueRef.current.push(...audios)
+        if (!currentAudioRef.current) playNextInQueue()
+      }
+    } catch {
+      // ignore TTS errors to avoid disrupting chat
+    }
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -122,6 +210,11 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
       }
       setComments(prev => [...prev, aiResponse])
       setChatHistory(prev => [...prev, { role: 'assistant', content: answer }])
+
+      // Optional voice playback
+      if (voiceEnabled && answer && answer.length < 3000) {
+        speakWithPuter(answer)
+      }
     } catch (e) {
       const aiResponse = {
         id: comments.length + 2,
@@ -224,6 +317,49 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
             autoFocus
           />
         )}
+        {/* Voice controls */}
+        <div className="w-full max-w-4xl flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-white text-sm">
+              <input
+                type="checkbox"
+                checked={voiceEnabled}
+                onChange={(e) => setVoiceEnabled(e.target.checked)}
+              />
+              Voice replies
+            </label>
+            <select
+              value={voiceLanguage}
+              onChange={(e) => setVoiceLanguage(e.target.value)}
+              className="bg-black border border-white rounded-md text-white text-sm px-2 py-1"
+            >
+              <option value="en-US">English (US)</option>
+              <option value="en-GB">English (UK)</option>
+              <option value="fr-FR">French</option>
+              <option value="de-DE">German</option>
+              <option value="es-ES">Spanish</option>
+              <option value="it-IT">Italian</option>
+            </select>
+            <select
+              value={voiceEngine}
+              onChange={(e) => setVoiceEngine(e.target.value)}
+              className="bg-black border border-white rounded-md text-white text-sm px-2 py-1"
+            >
+              <option value="standard">Standard</option>
+              <option value="neural">Neural</option>
+              <option value="generative">Generative</option>
+            </select>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={stopSpeaking}
+              className="px-3 py-1 bg-black border border-white text-white rounded-md text-sm hover:bg-gray-800"
+            >
+              Stop voice
+            </button>
+          </div>
+        </div>
         <button
           onClick={handleAskQuestion}
           disabled={isTyping}
