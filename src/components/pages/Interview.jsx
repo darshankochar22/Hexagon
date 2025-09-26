@@ -9,9 +9,8 @@ import {
   IconScreenShareOff,
   IconChartBar
 } from '@tabler/icons-react'
-import Poll from '../Poll'
-import PollManager from '../PollManager'
 import Chat from '../Chat'
+import LLMStreamer from '../../utils/llmStreamer'
 
 const Interview = () => {
   const { user } = useAuth()
@@ -21,13 +20,17 @@ const Interview = () => {
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const [screenStream, setScreenStream] = useState(null)
   const [showChat, setShowChat] = useState(true)
-  const [showPollManager, setShowPollManager] = useState(false)
-  const [activePolls, setActivePolls] = useState([])
-  const [isLoadingPolls, setIsLoadingPolls] = useState(false)
-  const [currentPoll, setCurrentPoll] = useState(null)
+  
+  // LLM streaming states
+  const [isLLMStreaming, setIsLLMStreaming] = useState(false)
+  const [sessionId, setSessionId] = useState(null)
+  const [llmInsights, setLlmInsights] = useState([])
+  const [streamingStatus, setStreamingStatus] = useState('')
   
   const videoRef = useRef(null)
   const screenRef = useRef(null)
+  const llmStreamerRef = useRef(null)
+  const streamingIntervalRef = useRef(null)
 
   // Get user media (camera and microphone)
   const startCamera = async () => {
@@ -113,93 +116,115 @@ const Interview = () => {
     }
   }
 
-  // Fetch active polls
-  const fetchActivePolls = async () => {
-    setIsLoadingPolls(true)
-    try {
-      const response = await fetch('http://localhost:8000/polls/active')
-      if (response.ok) {
-        const polls = await response.json()
-        setActivePolls(polls)
-      }
-    } catch (error) {
-      console.error('Error fetching polls:', error)
-    } finally {
-      setIsLoadingPolls(false)
-    }
-  }
-
-  // Handle poll creation
-  const handlePollCreated = (newPoll) => {
-    setActivePolls(prev => [...prev, newPoll])
-  }
-
-  // Handle poll deletion
-  const handlePollDeleted = (pollId) => {
-    setActivePolls(prev => prev.filter(poll => poll.id !== pollId))
-  }
-
-  // Handle vote
-  const handleVote = (pollId, optionId) => {
-    // Refresh polls to get updated vote counts
-    fetchActivePolls()
-  }
-
-  // Toggle chat (close polls if open)
+  // Toggle chat
   const toggleChat = () => {
     setShowChat(!showChat)
-    if (showPollManager) {
-      setShowPollManager(false)
+  }
+
+  // Initialize LLM streaming session
+  const initializeLLMSession = async () => {
+    try {
+      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      setSessionId(newSessionId)
+      
+      llmStreamerRef.current = new LLMStreamer()
+      await llmStreamerRef.current.connectVideoAnalysis(newSessionId, user?.id || 'anonymous')
+      
+      // Set up analysis callback
+      llmStreamerRef.current.onAnalysis((analysis) => {
+        setLlmInsights(prev => [...prev, analysis])
+        console.log('LLM Analysis received:', analysis)
+      })
+      
+      console.log('LLM session initialized:', newSessionId)
+    } catch (error) {
+      console.error('Failed to initialize LLM session:', error)
+      setStreamingStatus('Failed to initialize LLM session')
     }
   }
 
-  // Toggle poll manager (close chat if open)
-  const togglePollManager = () => {
-    if (!showPollManager) {
-      // Create a default poll when opening
-      const defaultPoll = {
-        id: 'default-poll',
-        question: 'How do you rate this interview so far?',
-        options: [
-          { id: 'opt1', text: 'Excellent', votes: 0 },
-          { id: 'opt2', text: 'Good', votes: 0 },
-          { id: 'opt3', text: 'Average', votes: 0 },
-          { id: 'opt4', text: 'Poor', votes: 0 }
-        ],
-        is_active: true,
-        created_at: new Date(),
-        total_votes: 0
+  // Start LLM streaming
+  const startLLMStreaming = async () => {
+    if (!localStream) {
+      alert('Please start your camera first')
+      return
+    }
+
+    try {
+      if (!llmStreamerRef.current) {
+        await initializeLLMSession()
       }
-      setCurrentPoll(defaultPoll)
-    }
-    
-    setShowPollManager(!showPollManager)
-    if (showChat) {
-      setShowChat(false)
+
+      setIsLLMStreaming(true)
+      setStreamingStatus('LLM analysis started...')
+      
+      // Start video analysis
+      if (videoRef.current) {
+        streamingIntervalRef.current = llmStreamerRef.current.startVideoAnalysis(
+          videoRef.current, 
+          user?.id || 'anonymous', 
+          2000 // Analyze every 2 seconds
+        )
+      }
+      
+    } catch (error) {
+      console.error('Failed to start LLM streaming:', error)
+      setStreamingStatus('Failed to start LLM streaming')
     }
   }
 
-  // Handle vote on current poll
-  const handleCurrentPollVote = (optionId) => {
-    if (!currentPoll) return
-
-    const updatedPoll = {
-      ...currentPoll,
-      options: currentPoll.options.map(option => 
-        option.id === optionId 
-          ? { ...option, votes: option.votes + 1 }
-          : option
-      )
-    }
+  // Stop LLM streaming
+  const stopLLMStreaming = () => {
+    setIsLLMStreaming(false)
+    setStreamingStatus('LLM analysis stopped')
     
-    updatedPoll.total_votes = updatedPoll.options.reduce((total, opt) => total + opt.votes, 0)
-    setCurrentPoll(updatedPoll)
+    if (streamingIntervalRef.current) {
+      clearInterval(streamingIntervalRef.current)
+      streamingIntervalRef.current = null
+    }
+  }
+
+  // Start screen share LLM analysis
+  const startScreenAnalysis = async () => {
+    if (!screenStream) {
+      alert('Please start screen sharing first')
+      return
+    }
+
+    try {
+      if (!llmStreamerRef.current) {
+        await initializeLLMSession()
+      }
+
+      // Connect to screen analysis
+      await llmStreamerRef.current.connectScreenAnalysis(sessionId, user?.id || 'anonymous')
+      
+      // Start screen analysis
+      if (screenRef.current) {
+        const screenInterval = llmStreamerRef.current.startScreenAnalysis(
+          screenRef.current, 
+          user?.id || 'anonymous', 
+          3000 // Analyze every 3 seconds
+        )
+        
+        // Store interval for cleanup
+        if (streamingIntervalRef.current) {
+          clearInterval(streamingIntervalRef.current)
+        }
+        streamingIntervalRef.current = screenInterval
+      }
+      
+      setStreamingStatus('Screen analysis started...')
+      
+    } catch (error) {
+      console.error('Failed to start screen analysis:', error)
+      setStreamingStatus('Failed to start screen analysis')
+    }
   }
 
   // Start camera on component mount
   useEffect(() => {
     startCamera()
-    fetchActivePolls()
     
     return () => {
       if (localStream) {
@@ -207,6 +232,12 @@ const Interview = () => {
       }
       if (screenStream) {
         screenStream.getTracks().forEach(track => track.stop())
+      }
+      if (llmStreamerRef.current) {
+        llmStreamerRef.current.cleanup()
+      }
+      if (streamingIntervalRef.current) {
+        clearInterval(streamingIntervalRef.current)
       }
     }
   }, [])
@@ -286,8 +317,34 @@ const Interview = () => {
           </div>
         </div>
 
+        {/* LLM Status Display */}
+        {(isLLMStreaming || streamingStatus) && (
+          <div className="bg-gray-900 rounded-lg p-4 mb-6 max-w-4xl mx-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {isLLMStreaming && (
+                  <div className="flex items-center gap-2 text-green-400">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                    <span>LLM Analysis Active</span>
+                  </div>
+                )}
+                {sessionId && (
+                  <div className="text-sm text-gray-400">
+                    Session: {sessionId.substring(0, 8)}...
+                  </div>
+                )}
+              </div>
+              {streamingStatus && (
+                <div className="text-sm text-blue-400">
+                  {streamingStatus}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Controls */}
-        <div className="flex gap-4 justify-center flex-wrap mb-16">
+        <div className="flex gap-4 justify-center flex-wrap mb-8">
           <button
             onClick={toggleVideo}
             className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 ${
@@ -326,7 +383,36 @@ const Interview = () => {
             {isScreenSharing ? <IconScreenShareOff size={20} /> : <IconScreenShare size={20} />}
             {isScreenSharing ? 'Stop Share' : 'Share Screen'}
           </button>
+        </div>
 
+        {/* LLM Analysis Controls */}
+        <div className="flex gap-4 justify-center flex-wrap mb-8">
+          <button
+            onClick={isLLMStreaming ? stopLLMStreaming : startLLMStreaming}
+            className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 ${
+              isLLMStreaming 
+                ? 'bg-red-600 hover:bg-red-700 text-white' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
+            title={isLLMStreaming ? 'Stop LLM analysis' : 'Start LLM analysis'}
+          >
+            {isLLMStreaming ? <IconVideoOff size={20} /> : <IconVideo size={20} />}
+            {isLLMStreaming ? 'Stop Analysis' : 'Start Analysis'}
+          </button>
+
+          <button
+            onClick={startScreenAnalysis}
+            className="flex items-center gap-2 px-5 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 bg-blue-600 hover:bg-blue-700 text-white"
+            title="Analyze screen share with LLM"
+            disabled={!isScreenSharing}
+          >
+            <IconScreenShare size={20} />
+            Analyze Screen
+          </button>
+        </div>
+
+        {/* Additional Controls */}
+        <div className="flex gap-4 justify-center flex-wrap mb-16">
           <button
             onClick={toggleChat}
             className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 ${
@@ -339,19 +425,6 @@ const Interview = () => {
             <IconChartBar size={20} />
             {showChat ? 'Hide Chat' : 'AI Chat'}
           </button>
-
-          <button
-            onClick={togglePollManager}
-            className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 ${
-              showPollManager 
-                ? 'bg-white hover:bg-gray-100 text-black border border-gray-300' 
-                : 'bg-black hover:bg-gray-800 text-white border border-gray-600'
-            }`}
-            title={showPollManager ? 'Hide poll manager' : 'Open poll manager'}
-          >
-            <IconChartBar size={20} />
-            {showPollManager ? 'Hide Polls' : 'New Poll'}
-          </button>
         </div>
 
         {/* AI Chat */}
@@ -361,14 +434,42 @@ const Interview = () => {
           </div>
         )}
 
-        {/* Current Poll */}
-        {showPollManager && currentPoll && (
-          <div className="w-full flex justify-center">
-            <div className="bg-black rounded-3xl p-4 w-full max-w-4xl">
-              <Poll
-                poll={currentPoll}
-                onVote={handleCurrentPollVote}
-              />
+        {/* LLM Insights */}
+        {llmInsights.length > 0 && (
+          <div className="bg-black rounded-3xl p-4 w-full max-w-6xl">
+            <h3 className="text-xl font-bold mb-4 text-center">Real-time Interview Analysis</h3>
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {llmInsights.slice(-10).map((insight, index) => (
+                <div key={index} className="bg-gray-900 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-sm text-blue-400">
+                      {insight.type === 'video_analysis' ? 'Video Analysis' : 
+                       insight.type === 'screen_analysis' ? 'Screen Analysis' : 
+                       insight.type === 'audio_analysis' ? 'Audio Analysis' : 'Analysis'}
+                    </h4>
+                    <span className="text-xs text-gray-400">
+                      {new Date(insight.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-300 mb-2">
+                    {insight.analysis}
+                  </div>
+                  {insight.insights && insight.insights.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {insight.insights.map((insightTag, tagIndex) => (
+                        <span key={tagIndex} className="px-2 py-1 bg-blue-600 text-xs rounded-full">
+                          {insightTag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {insight.confidence && (
+                    <div className="text-xs text-gray-400 mt-2">
+                      Confidence: {(insight.confidence * 100).toFixed(0)}%
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
