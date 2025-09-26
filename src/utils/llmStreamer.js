@@ -7,6 +7,8 @@ class LLMStreamer {
     this.sessionId = null;
     this.isConnected = false;
     this.analysisCallbacks = [];
+    this.lastVideoSentAt = 0;
+    this.lastScreenSentAt = 0;
   }
 
   // Connect to LLM video/audio analysis
@@ -86,13 +88,17 @@ class LLMStreamer {
   }
 
   // Send video frame for LLM analysis
-  sendVideoFrame(videoElement, userId) {
+  sendVideoFrame(videoElement, userId, options = {}) {
     if (!this.llmWebSocket || this.llmWebSocket.readyState !== WebSocket.OPEN) {
       return;
     }
 
-    const canvas = this.captureFrame(videoElement);
-    const base64Data = canvas.toDataURL("image/png").split(",")[1];
+    const now = Date.now();
+    const minIntervalMs = options.minIntervalMs ?? 15000; // default 15s
+    if (now - this.lastVideoSentAt < minIntervalMs) return;
+
+    const canvas = this.captureFrame(videoElement, { downscaleToWidth: 640 });
+    const base64Data = canvas.toDataURL("image/jpeg", 0.5).split(",")[1];
 
     const message = {
       type: "video_frame",
@@ -102,6 +108,7 @@ class LLMStreamer {
     };
 
     this.llmWebSocket.send(JSON.stringify(message));
+    this.lastVideoSentAt = now;
   }
 
   // Send audio chunk for LLM analysis
@@ -123,7 +130,7 @@ class LLMStreamer {
   }
 
   // Send screen share for LLM analysis
-  sendScreenShare(screenElement, userId) {
+  sendScreenShare(screenElement, userId, options = {}) {
     if (
       !this.screenWebSocket ||
       this.screenWebSocket.readyState !== WebSocket.OPEN
@@ -131,8 +138,12 @@ class LLMStreamer {
       return;
     }
 
-    const canvas = this.captureFrame(screenElement);
-    const base64Data = canvas.toDataURL("image/png").split(",")[1];
+    const now = Date.now();
+    const minIntervalMs = options.minIntervalMs ?? 30000; // default 30s
+    if (now - this.lastScreenSentAt < minIntervalMs) return;
+
+    const canvas = this.captureFrame(screenElement, { downscaleToWidth: 1024 });
+    const base64Data = canvas.toDataURL("image/jpeg", 0.5).split(",")[1];
 
     const message = {
       type: "screen_share",
@@ -142,15 +153,24 @@ class LLMStreamer {
     };
 
     this.screenWebSocket.send(JSON.stringify(message));
+    this.lastScreenSentAt = now;
   }
 
   // Capture frame from video element
-  captureFrame(videoElement) {
+  captureFrame(videoElement, { downscaleToWidth } = {}) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
 
-    canvas.width = videoElement.videoWidth || videoElement.width;
-    canvas.height = videoElement.videoHeight || videoElement.height;
+    const srcW = videoElement.videoWidth || videoElement.width || 1280;
+    const srcH = videoElement.videoHeight || videoElement.height || 720;
+    if (downscaleToWidth && srcW > downscaleToWidth) {
+      const scale = downscaleToWidth / srcW;
+      canvas.width = Math.round(srcW * scale);
+      canvas.height = Math.round(srcH * scale);
+    } else {
+      canvas.width = srcW;
+      canvas.height = srcH;
+    }
 
     ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
@@ -211,14 +231,18 @@ class LLMStreamer {
   }
 
   // Start real-time video analysis
-  startVideoAnalysis(videoElement, userId, intervalMs = 2000) {
-    if (!this.isConnected) {
-      console.error("Not connected to LLM service");
-      return;
+  async startVideoAnalysis(videoElement, userId, intervalMs = 15000) {
+    if (!this.llmWebSocket || this.llmWebSocket.readyState !== WebSocket.OPEN) {
+      try {
+        await this.connectVideoAnalysis(this.sessionId);
+      } catch (e) {
+        console.error("Failed to connect video analysis socket", e);
+        return;
+      }
     }
 
     const sendFrame = () => {
-      this.sendVideoFrame(videoElement, userId);
+      this.sendVideoFrame(videoElement, userId, { minIntervalMs: intervalMs });
     };
 
     // Send initial frame
@@ -229,17 +253,23 @@ class LLMStreamer {
   }
 
   // Start real-time screen analysis
-  startScreenAnalysis(screenElement, userId, intervalMs = 3000) {
+  async startScreenAnalysis(screenElement, userId, intervalMs = 30000) {
     if (
       !this.screenWebSocket ||
       this.screenWebSocket.readyState !== WebSocket.OPEN
     ) {
-      console.error("Not connected to screen analysis service");
-      return;
+      try {
+        await this.connectScreenAnalysis(this.sessionId);
+      } catch (e) {
+        console.error("Failed to connect screen analysis socket", e);
+        return;
+      }
     }
 
     const sendScreen = () => {
-      this.sendScreenShare(screenElement, userId);
+      this.sendScreenShare(screenElement, userId, {
+        minIntervalMs: intervalMs,
+      });
     };
 
     // Send initial screen

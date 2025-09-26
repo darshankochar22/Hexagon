@@ -255,10 +255,10 @@ const Interview = () => {
       setStreamingStatus('LLM analysis started...')
       
       if (videoRef.current) {
-        streamingIntervalRef.current = llmStreamerRef.current.startVideoAnalysis(
-          videoRef.current, 
-          user?.id || 'anonymous', 
-          2000
+        streamingIntervalRef.current = await llmStreamerRef.current.startVideoAnalysis(
+          videoRef.current,
+          user?.id || 'anonymous',
+          15000
         )
       }
       
@@ -294,10 +294,10 @@ const Interview = () => {
       await llmStreamerRef.current.connectScreenAnalysis(sessionId, user?.id || 'anonymous')
       
       if (screenRef.current) {
-        const screenInterval = llmStreamerRef.current.startScreenAnalysis(
-          screenRef.current, 
-          user?.id || 'anonymous', 
-          3000
+        const screenInterval = await llmStreamerRef.current.startScreenAnalysis(
+          screenRef.current,
+          user?.id || 'anonymous',
+          30000
         )
         if (streamingIntervalRef.current) clearInterval(streamingIntervalRef.current)
         streamingIntervalRef.current = screenInterval
@@ -579,7 +579,14 @@ const Interview = () => {
         {/* AI Chat */}
         {showChat && (
           <div className="bg-black rounded-3xl p-4 w-full max-w-6xl">
-            <Chat />
+            <Chat
+              selectedJob={selectedJob}
+              allJobs={jobs}
+              resumeMeta={resumeMeta}
+              fetchResumeBase64={fetchResumeBase64}
+              sessionId={sessionId}
+              insights={llmInsights}
+            />
           </div>
         )}
 

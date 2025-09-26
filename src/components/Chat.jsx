@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { IconSend, IconUser } from '@tabler/icons-react'
 
-const Chat = () => {
+const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, insights }) => {
   const [comments, setComments] = useState([
     {
       id: 1,
@@ -14,6 +14,7 @@ const Chat = () => {
   const [inputMessage, setInputMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [showInput, setShowInput] = useState(false)
+  const [chatHistory, setChatHistory] = useState([]) // {role, content}
   const messagesEndRef = useRef(null)
 
   const scrollToBottom = () => {
@@ -36,22 +37,103 @@ const Chat = () => {
     }
 
     setComments(prev => [...prev, userComment])
+    setChatHistory(prev => [...prev, { role: 'user', content: inputMessage }])
     setInputMessage('')
     setShowInput(false)
     setIsTyping(true)
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Prepare context; optionally include resume file as base64
+      let resumeBase64 = null
+      if (resumeMeta && typeof fetchResumeBase64 === 'function') {
+        try {
+          resumeBase64 = await fetchResumeBase64()
+        } catch {
+          resumeBase64 = null
+        }
+      }
+
+      // Optional: fetch recent session insights to enrich context
+      let sessionInsights = null
+      try {
+        if (sessionId) {
+          const r = await fetch(`http://localhost:8000/media/llm/insights/${sessionId}`)
+          if (r.ok) {
+            sessionInsights = await r.json()
+          }
+        }
+      } catch {
+        // ignore session insights fetch errors to keep chat responsive
+      }
+
+      // Include the on-page (blue box) insights as an immediate context tail as well
+      let localInsightsTail = []
+      try {
+        const tail = Array.isArray(insights) ? insights.slice(-5) : []
+        localInsightsTail = tail.map(it => ({
+          type: it.type,
+          timestamp: it.timestamp,
+          analysis: it.analysis,
+          insights: it.insights
+        }))
+      } catch {
+        // ignore local insights extraction errors
+      }
+
+      const payload = {
+        session_id: sessionId || null,
+        messages: chatHistory.concat([{ role: 'user', content: userComment.text }]),
+        selected_job: selectedJob || null,
+        all_jobs: (allJobs || []).map(j => ({
+          id: j.id,
+          title: j.title,
+          company: j.company,
+          location: j.location,
+          experience: j.experience,
+          skills: j.skills,
+          description: j.description
+        })),
+        resume_meta: resumeMeta || null,
+        resume_file_base64: resumeBase64,
+        session_insights: sessionInsights,
+        local_insights_tail: localInsightsTail
+      }
+
+      const resp = await fetch('http://localhost:8000/media/llm/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!resp.ok) {
+        const text = await resp.text()
+        throw new Error(text || `HTTP ${resp.status}`)
+      }
+
+      const data = await resp.json()
+      const answer = data.reply || 'No reply'
+
       const aiResponse = {
         id: comments.length + 2,
-        text: `Thanks for your question: "${inputMessage}". This is a simulated response. In a real implementation, this would connect to an AI service.`,
+        text: answer,
         author: 'AI Assistant',
         timestamp: new Date(),
         isAI: true
       }
       setComments(prev => [...prev, aiResponse])
+      setChatHistory(prev => [...prev, { role: 'assistant', content: answer }])
+    } catch (e) {
+      const aiResponse = {
+        id: comments.length + 2,
+        text: `AI error: ${e.message}`,
+        author: 'System',
+        timestamp: new Date(),
+        isAI: true
+      }
+      setComments(prev => [...prev, aiResponse])
+    } finally {
       setIsTyping(false)
-    }, 1500)
+    }
   }
 
   const handleKeyPress = (e) => {
