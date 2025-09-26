@@ -1,29 +1,40 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { IconUpload, IconDownload, IconTrash, IconFileText } from '@tabler/icons-react'
+import { GlowingEffect } from '../ui/glowing-effect'
 
 const Profile = () => {
   const { user, logout, refreshUser } = useAuth()
-  const [isEditing, setIsEditing] = useState(false)
   const [editedProfile, setEditedProfile] = useState({})
   const [saving, setSaving] = useState(false)
+  const [uploadingResume, setUploadingResume] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const initializedRef = useRef(false)
+  const [isEditing, setIsEditing] = useState(false)
 
   useEffect(() => {
-    if (user?.profile) {
+    if (!initializedRef.current && user?.profile) {
       setEditedProfile(user.profile)
+      initializedRef.current = true
     }
   }, [user])
 
-  const handleEdit = () => {
-    setIsEditing(true)
-  }
-
-  const handleSave = async () => {
+  const saveProfileNow = async (nextProfile) => {
     setSaving(true)
+    setSaveError('')
     try {
-      const token = localStorage.getItem('hexagon_token')
-      if (!token) {
-        throw new Error('No authentication token found')
-      }
+      const token =
+        localStorage.getItem('hexagon_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('jwt')
+      if (!token) throw new Error('No authentication token found')
+
+      // Only send fields accepted by backend schema; exclude nested objects like resume
+      const allowedFields = ['email', 'full_name', 'avatar', 'bio', 'location', 'website', 'phone']
+      const payload = allowedFields.reduce((acc, key) => {
+        if (nextProfile[key] !== undefined) acc[key] = nextProfile[key]
+        return acc
+      }, {})
 
       const response = await fetch('http://localhost:8000/users/me', {
         method: 'PUT',
@@ -31,35 +42,61 @@ const Profile = () => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(editedProfile)
+        body: JSON.stringify(payload)
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to update profile')
+        let serverMessage = 'Failed to update profile'
+        try {
+          const errorData = await response.json()
+          serverMessage = errorData.detail || serverMessage
+        } catch (_) {
+          const text = await response.text()
+          serverMessage = text || serverMessage
+        }
+        throw new Error(`${response.status} ${response.statusText} - ${serverMessage}`)
       }
-      
+
       await refreshUser()
-      
       setIsEditing(false)
-    } catch (error) {
-      console.error('Error updating profile:', error)
-      alert('Failed to update profile: ' + error.message)
+    } catch (err) {
+      console.error('Save error:', err)
+      setSaveError(err.message)
     } finally {
       setSaving(false)
     }
   }
 
-  const handleCancel = () => {
-    setEditedProfile(user.profile)
-    setIsEditing(false)
+  const handleInputChange = (field, value) => {
+    const next = { ...editedProfile, [field]: value }
+    setEditedProfile(next)
   }
 
-  const handleInputChange = (field, value) => {
-    setEditedProfile(prev => ({
-      ...prev,
-      [field]: value
-    }))
+  const handleCancel = () => {
+    setEditedProfile(user?.profile || {})
+    setIsEditing(false)
+    setSaveError('')
+  }
+
+  // Helper: fetch resume file as base64 for LLM parsing
+  const fetchResumeBase64 = async () => {
+    try {
+      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+      const resp = await fetch('http://localhost:8000/users/download-resume', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
+      if (!resp.ok) return null
+      const blob = await resp.blob()
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    } catch (e) {
+      console.error('Failed to fetch resume base64', e)
+      return null
+    }
   }
 
   if (!user) {
@@ -73,147 +110,204 @@ const Profile = () => {
   }
 
   return (
-    <div className="profile-container">
-      <div className="profile-card">
-        <div className="profile-header">
-          <div className="profile-avatar">
-            {user.profile?.avatar ? (
-              <img src={user.profile.avatar} alt="Profile" className="avatar-image" />
-            ) : (
-              <div className="avatar-placeholder">
-                {user.username?.charAt(0)?.toUpperCase() || 'U'}
-              </div>
-            )}
-          </div>
-          <div className="profile-info">
-            <h1 className="profile-name">
-              {user.profile?.full_name || user.username}
-            </h1>
-            <p className="profile-username">@{user.username}</p>
-            <div className="profile-provider">
-              <span className="provider-badge">
-                {user.provider === 'google' ? 'Google Account' : 'Local Account'}
-              </span>
-            </div>
-          </div>
-          <div className="profile-actions">
-            {!isEditing ? (
-              <button className="btn btn-secondary" onClick={handleEdit}>
-                Edit Profile
-              </button>
-            ) : (
-              <div className="edit-actions">
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
-                <button className="btn btn-outline" onClick={handleCancel} disabled={saving}>
-                  Cancel
-                </button>
-              </div>
-            )}
-            <button className="btn btn-danger" onClick={logout}>
-              Logout
-            </button>
-          </div>
-        </div>
-
-        <div className="profile-details">
-          <div className="profile-section">
-            <h3>Contact Information</h3>
-            <div className="detail-grid">
-              <div className="detail-item">
-                <label>Email</label>
-                {isEditing ? (
-                  <input
-                    type="email"
-                    value={editedProfile.email || ''}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className="profile-input"
-                  />
-                ) : (
-                  <span>{user.profile?.email || 'Not provided'}</span>
-                )}
-              </div>
-              <div className="detail-item">
-                <label>Phone</label>
-                {isEditing ? (
-                  <input
-                    type="tel"
-                    value={editedProfile.phone || ''}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className="profile-input"
-                  />
-                ) : (
-                  <span>{user.profile?.phone || 'Not provided'}</span>
-                )}
-              </div>
-              <div className="detail-item">
-                <label>Website</label>
-                {isEditing ? (
-                  <input
-                    type="url"
-                    value={editedProfile.website || ''}
-                    onChange={(e) => handleInputChange('website', e.target.value)}
-                    className="profile-input"
-                  />
-                ) : (
-                  <span>{user.profile?.website || 'Not provided'}</span>
-                )}
-              </div>
-              <div className="detail-item">
-                <label>Location</label>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editedProfile.location || ''}
-                    onChange={(e) => handleInputChange('location', e.target.value)}
-                    className="profile-input"
-                  />
-                ) : (
-                  <span>{user.profile?.location || 'Not provided'}</span>
-                )}
+    <div className="bg-black text-white min-h-screen pt-40 pb-10 px-4 flex justify-center">
+      <div className="max-w-4xl w-full">
+        {/* Outer Glowing Box wrapping entire profile content */}
+        <div className="relative rounded-2xl md:rounded-3xl p-3 md:p-4 overflow-hidden shadow-[0_0_35px_0_rgba(255,255,255,0.08)]">
+          <GlowingEffect spread={40} glow={true} disabled={false} proximity={64} inactiveZone={0.01} />
+          <div className="relative bg-black rounded-xl md:rounded-2xl p-6 md:p-8 ring-1 ring-white/10">
+            {/* Header Card */}
+            <div className="bg-black rounded-2xl p-6 md:p-8 mb-8">
+              <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+                <div className="profile-avatar">
+                  {user.profile?.avatar ? (
+                    <img src={user.profile.avatar} alt="Profile" className="w-24 h-24 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-white text-black flex items-center justify-center text-3xl font-bold">
+                      {user.username?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                  )}
+                </div>
+                <div className="profile-info flex-1 text-center md:text-left">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editedProfile.full_name || ''}
+                      onChange={(e) => handleInputChange('full_name', e.target.value)}
+                      placeholder="Full name"
+                      className="w-full px-4 py-3 bg-black rounded-lg text-white placeholder-gray-400 focus:outline-none mb-2"
+                    />
+                  ) : (
+                    <h1 className="text-3xl font-bold text-white mb-2">{user.profile?.full_name || user.username}</h1>
+                  )}
+                  <p className="text-xl text-white mb-4">@{user.username}</p>
+                  <div className="profile-provider">
+                    <span className="px-3 py-1 bg-white text-black rounded-full text-sm font-medium">
+                      {user.provider === 'google' ? 'Google Account' : 'Local Account'}
+                    </span>
+                  </div>
+                </div>
+                <div className="profile-actions flex flex-col gap-2 items-center md:items-end min-w-[180px]">
+                  {saving ? (
+                    <span className="text-sm text-gray-300">Saving...</span>
+                  ) : saveError ? (
+                    <span className="text-sm text-red-400" title={saveError}>Save error</span>
+                  ) : (
+                    <span className="text-sm text-green-400">Ready</span>
+                  )}
+                  {!isEditing ? (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="w-full px-6 py-2 bg.white bg-white text-black rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                      title="Edit profile"
+                    >
+                      Edit Profile
+                    </button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveProfileNow(editedProfile)}
+                        className="px-5 py-2 bg-white text.black text-black rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium disabled:opacity-50"
+                        disabled={saving}
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancel}
+                        className="px-5 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  <button 
+                    className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                    onClick={logout}
+                  >
+                    Logout
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="profile-section">
-            <h3>About</h3>
-            <div className="detail-item">
-              {isEditing ? (
-                <textarea
-                  value={editedProfile.bio || ''}
-                  onChange={(e) => handleInputChange('bio', e.target.value)}
-                  className="profile-textarea"
-                  placeholder="Tell us about yourself..."
-                  rows={4}
-                />
+            {/* Resume Section */}
+            <div className="bg-black rounded-2xl p-8 mb-8">
+              <h2 className="text-2xl font-bold text-white mb-6">Resume</h2>
+              {user.profile?.resume ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-4 bg-black rounded-lg">
+                    <IconFileText size={24} className="text-white" />
+                    <div className="flex-1">
+                      <p className="text-white font-medium">{user.profile.resume.filename}</p>
+                      <p className="text-gray-400 text-sm">Uploaded: {new Date(user.profile.resume.uploaded_at).toLocaleDateString()}</p>
+                      <p className="text-gray-400 text-sm">Size: {(user.profile.resume.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={async () => {
+                      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+                      const response = await fetch('http://localhost:8000/users/download-resume', { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+                      if (response.ok) {
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = user.profile.resume.filename || 'resume.pdf'; document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); document.body.removeChild(a);
+                      }
+                    }} className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium">Download</button>
+                    <button onClick={async () => {
+                      if (!confirm('Delete resume?')) return
+                      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+                      await fetch('http://localhost:8000/users/delete-resume', { method: 'DELETE', headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+                      await refreshUser()
+                    }} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium">Delete</button>
+                  </div>
+                </div>
               ) : (
-                <p className="profile-bio">
-                  {user.profile?.bio || 'No bio provided'}
-                </p>
+                <div className="text-center py-8">
+                  <IconFileText size={48} className="text-white mx-auto mb-4" />
+                  <p className="text-white text-lg mb-4">No resume uploaded</p>
+                  <label className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium cursor-pointer">
+                    <IconUpload size={18} />
+                    Upload Resume
+                    <input type="file" accept=".pdf,.doc,.docx" onChange={async (e) => {
+                      const file = e.target.files?.[0]; if (!file) return; setUploadingResume(true);
+                      const formData = new FormData(); formData.append('file', file);
+                      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+                      await fetch('http://localhost:8000/users/upload-resume', { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
+                      await refreshUser(); setUploadingResume(false); e.target.value = '';
+                    }} className="hidden" />
+                  </label>
+                  {uploadingResume && (<p className="text-white mt-2">Uploading...</p>)}
+                </div>
               )}
             </div>
-          </div>
 
-          <div className="profile-section">
-            <h3>Account Information</h3>
-            <div className="detail-grid">
-              <div className="detail-item">
-                <label>Username</label>
-                <span>{user.username}</span>
+            <div className="profile-details">
+              <div className="profile-section bg-black rounded-2xl p-8 mb-8">
+                <h3 className="text-xl font-bold text-white mb-6">Contact Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-white font-medium">Email</label>
+                    {isEditing ? (
+                      <input type="email" value={editedProfile.email || ''} onChange={(e) => handleInputChange('email', e.target.value)} className="w-full px-4 py-3 bg-black rounded-lg text-white placeholder-gray-400 focus:outline-none" placeholder="Enter email" />
+                    ) : (
+                      <p className="text-white">{user.profile?.email || 'Not provided'}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text.white text-white font-medium">Phone</label>
+                    {isEditing ? (
+                      <input type="tel" value={editedProfile.phone || ''} onChange={(e) => handleInputChange('phone', e.target.value)} className="w-full px-4 py-3 bg-black rounded-lg text-white placeholder-gray-400 focus:outline-none" placeholder="Enter phone" />
+                    ) : (
+                      <p className="text-white">{user.profile?.phone || 'Not provided'}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-white font-medium">Website</label>
+                    {isEditing ? (
+                      <input type="url" value={editedProfile.website || ''} onChange={(e) => handleInputChange('website', e.target.value)} className="w-full px-4 py-3 bg-black rounded-lg text-white placeholder-gray-400 focus:outline-none" placeholder="Enter website" />
+                    ) : (
+                      <p className="text-white">{user.profile?.website || 'Not provided'}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-white font-medium">Location</label>
+                    {isEditing ? (
+                      <input type="text" value={editedProfile.location || ''} onChange={(e) => handleInputChange('location', e.target.value)} className="w-full px-4 py-3 bg-black rounded-lg text-white placeholder-gray-400 focus:outline-none" placeholder="Enter location" />
+                    ) : (
+                      <p className="text-white">{user.profile?.location || 'Not provided'}</p>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="detail-item">
-                <label>Account Type</label>
-                <span>{user.provider === 'google' ? 'Google OAuth' : 'Email/Password'}</span>
+
+              <div className="profile-section bg-black rounded-2xl p-8 mb-8">
+                <h3 className="text-xl font-bold text-white mb-6">About</h3>
+                <div className="space-y-2">
+                  {isEditing ? (
+                    <textarea value={editedProfile.bio || ''} onChange={(e) => handleInputChange('bio', e.target.value)} className="w-full px-4 py-3 bg-black rounded-lg text-white placeholder-gray-400 focus:outline-none resize-none" placeholder="Tell us about yourself..." rows={4} />
+                  ) : (
+                    <p className="text-white leading-relaxed">{user.profile?.bio || 'No bio provided'}</p>
+                  )}
+                </div>
               </div>
-              <div className="detail-item">
-                <label>Member Since</label>
-                <span>
-                  {user.created_at 
-                    ? new Date(user.created_at).toLocaleDateString()
-                    : 'Unknown'
-                  }
-                </span>
+
+              <div className="profile-section bg-black rounded-2xl p-8">
+                <h3 className="text-xl font-bold text-white mb-6">Account Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-white font-medium">Username</label>
+                    <p className="text-white">{user.username}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-white font-medium">Account Type</label>
+                    <p className="text-white">{user.provider === 'google' ? 'Google OAuth' : 'Email/Password'}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-white font-medium">Member Since</label>
+                    <p className="text-white">{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

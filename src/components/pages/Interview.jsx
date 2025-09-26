@@ -7,7 +7,9 @@ import {
   IconMicrophoneOff,
   IconScreenShare,
   IconScreenShareOff,
-  IconChartBar
+  IconChartBar,
+  IconFileText,
+  IconAlertCircle
 } from '@tabler/icons-react'
 import Chat from '../Chat'
 import LLMStreamer from '../../utils/llmStreamer'
@@ -21,6 +23,14 @@ const Interview = () => {
   const [screenStream, setScreenStream] = useState(null)
   const [showChat, setShowChat] = useState(true)
   
+  // Job selection & context
+  const [jobs, setJobs] = useState([])
+  const [selectedJobId, setSelectedJobId] = useState('')
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [resumeMeta, setResumeMeta] = useState(null)
+  const [loadingJobs, setLoadingJobs] = useState(false)
+  const [showJobMenu, setShowJobMenu] = useState(false)
+
   // LLM streaming states
   const [isLLMStreaming, setIsLLMStreaming] = useState(false)
   const [sessionId, setSessionId] = useState(null)
@@ -31,6 +41,35 @@ const Interview = () => {
   const screenRef = useRef(null)
   const llmStreamerRef = useRef(null)
   const streamingIntervalRef = useRef(null)
+
+  // Fetch jobs and resume meta
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoadingJobs(true)
+        const jobsResp = await fetch('http://localhost:8000/jobs/')
+        if (jobsResp.ok) {
+          const jobsJson = await jobsResp.json()
+          setJobs(jobsJson)
+        }
+      } catch (e) {
+        console.error('Failed to load jobs', e)
+      } finally {
+        setLoadingJobs(false)
+      }
+
+      // Pull resume meta from user context if present
+      if (user?.profile?.resume) {
+        setResumeMeta({
+          filename: user.profile.resume.filename,
+          content_type: user.profile.resume.content_type,
+          uploaded_at: user.profile.resume.uploaded_at,
+          file_size: user.profile.resume.file_size
+        })
+      }
+    }
+    load()
+  }, [user])
 
   // Get user media (camera and microphone)
   const startCamera = async () => {
@@ -80,24 +119,17 @@ const Interview = () => {
         audio: true
       })
       
-      console.log('Screen stream received:', screenStream)
       setScreenStream(screenStream)
       setIsScreenSharing(true)
       
-      // Wait for the ref to be available
       setTimeout(() => {
         if (screenRef.current) {
-          console.log('Setting screen stream to video element')
           screenRef.current.srcObject = screenStream
           screenRef.current.play().catch(e => console.log('Play failed:', e))
-        } else {
-          console.log('Screen ref not available')
         }
       }, 100)
       
-      // Handle screen share end
       screenStream.getVideoTracks()[0].addEventListener('ended', () => {
-        console.log('Screen share ended')
         stopScreenShare()
       })
       
@@ -121,6 +153,27 @@ const Interview = () => {
     setShowChat(!showChat)
   }
 
+  // Helper: fetch resume file as base64 for LLM parsing
+  const fetchResumeBase64 = async () => {
+    try {
+      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+      const resp = await fetch('http://localhost:8000/users/download-resume', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
+      if (!resp.ok) return null
+      const blob = await resp.blob()
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    } catch (e) {
+      console.error('Failed to fetch resume base64', e)
+      return null
+    }
+  }
+
   // Initialize LLM streaming session
   const initializeLLMSession = async () => {
     try {
@@ -130,13 +183,56 @@ const Interview = () => {
       llmStreamerRef.current = new LLMStreamer()
       await llmStreamerRef.current.connectVideoAnalysis(newSessionId, user?.id || 'anonymous')
       
-      // Set up analysis callback
       llmStreamerRef.current.onAnalysis((analysis) => {
         setLlmInsights(prev => [...prev, analysis])
-        console.log('LLM Analysis received:', analysis)
+      })
+
+      // Build rich interview context for testing
+      let resumeBase64 = null
+      if (user?.profile?.resume) {
+        resumeBase64 = await fetchResumeBase64()
+      }
+
+      const jobContextList = jobs.map(j => ({
+        id: j.id,
+        title: j.title,
+        company: j.company,
+        location: j.location,
+        experience: j.experience,
+        skills: j.skills,
+        description: j.description
+      }))
+
+      const directives = {
+        objective: 'Parse and analyze candidate against selected job and full job list',
+        tasks: [
+          'Parse resume (if provided). Extract ALL links (GitHub, LinkedIn, portfolio, live demos, papers).',
+          'Identify all projects with tech stack, role, outcomes, dates.',
+          'Summarize strengths, gaps, red flags, and seniority signals.',
+          'Cross-check candidate fit against selected job and suggest 5 tailored questions.',
+          'Generate short feedback: what to probe more and recommended coding/architecture tasks.'
+        ]
+      }
+
+      // Send context to LLM
+      llmStreamerRef.current.sendInterviewContext({
+        type: 'interview_context',
+        user_id: user?.id || 'anonymous',
+        selected_job: selectedJob ? {
+          id: selectedJob.id,
+          title: selectedJob.title,
+          company: selectedJob.company,
+          location: selectedJob.location,
+          experience: selectedJob.experience,
+          skills: selectedJob.skills,
+          description: selectedJob.description
+        } : null,
+        all_jobs: jobContextList,
+        resume_meta: resumeMeta || null,
+        resume_file_base64: resumeBase64 || null,
+        directives
       })
       
-      console.log('LLM session initialized:', newSessionId)
     } catch (error) {
       console.error('Failed to initialize LLM session:', error)
       setStreamingStatus('Failed to initialize LLM session')
@@ -158,12 +254,11 @@ const Interview = () => {
       setIsLLMStreaming(true)
       setStreamingStatus('LLM analysis started...')
       
-      // Start video analysis
       if (videoRef.current) {
         streamingIntervalRef.current = llmStreamerRef.current.startVideoAnalysis(
           videoRef.current, 
           user?.id || 'anonymous', 
-          2000 // Analyze every 2 seconds
+          2000
         )
       }
       
@@ -196,21 +291,15 @@ const Interview = () => {
         await initializeLLMSession()
       }
 
-      // Connect to screen analysis
       await llmStreamerRef.current.connectScreenAnalysis(sessionId, user?.id || 'anonymous')
       
-      // Start screen analysis
       if (screenRef.current) {
         const screenInterval = llmStreamerRef.current.startScreenAnalysis(
           screenRef.current, 
           user?.id || 'anonymous', 
-          3000 // Analyze every 3 seconds
+          3000
         )
-        
-        // Store interval for cleanup
-        if (streamingIntervalRef.current) {
-          clearInterval(streamingIntervalRef.current)
-        }
+        if (streamingIntervalRef.current) clearInterval(streamingIntervalRef.current)
         streamingIntervalRef.current = screenInterval
       }
       
@@ -221,6 +310,16 @@ const Interview = () => {
       setStreamingStatus('Failed to start screen analysis')
     }
   }
+
+  // When a job is selected from dropdown, set selectedJob
+  useEffect(() => {
+    if (!selectedJobId) {
+      setSelectedJob(null)
+      return
+    }
+    const job = jobs.find(j => j.id === selectedJobId)
+    setSelectedJob(job || null)
+  }, [selectedJobId, jobs])
 
   // Start camera on component mount
   useEffect(() => {
@@ -248,6 +347,8 @@ const Interview = () => {
         <h1 className="text-4xl font-bold mb-3">Interview Setup</h1>
         <p className="text-lg text-gray-400">Prepare for your interview</p>
       </div>
+
+      {/* Job+resume controls moved below into Controls bar */}
 
       <div className="flex flex-col items-center gap-6 mb-32">
         {/* Camera Video Section */}
@@ -344,7 +445,55 @@ const Interview = () => {
         )}
 
         {/* Controls */}
-        <div className="flex gap-4 justify-center flex-wrap mb-8">
+        <div className="flex gap-4 justify-center flex-wrap mb-8 relative">
+          {/* Job chooser button + dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowJobMenu((v) => !v)}
+              className="px-4 py-3 rounded-full bg-white text-black text-sm font-medium hover:bg-gray-200 transition-colors"
+              title="Select job for interview context"
+            >
+              {selectedJob ? `Job: ${selectedJob.title}` : (loadingJobs ? 'Loading jobs…' : 'Choose Job')}
+            </button>
+            {showJobMenu && (
+              <div className="absolute z-20 mt-2 w-72 max-h-64 overflow-auto rounded-lg border border-white/10 bg-black shadow-xl">
+                <ul className="divide-y divide-white/5">
+                  {jobs.length === 0 && (
+                    <li className="px-3 py-2 text-sm text-white/60">{loadingJobs ? 'Loading…' : 'No jobs available'}</li>
+                  )}
+                  {jobs.map((j) => (
+                    <li key={j.id}>
+                      <button
+                        onClick={() => { setSelectedJobId(j.id); setShowJobMenu(false); }}
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/10"
+                      >
+                        {j.title} — {j.company}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Resume status chip */}
+          {resumeMeta ? (
+            <div className="px-4 py-3 rounded-full bg-white text-black text-sm font-medium flex items-center gap-2">
+              <span className="inline-flex w-2 h-2 rounded-full bg-green-500"></span>
+              <IconFileText size={16} />
+              <span>Resume linked</span>
+            </div>
+          ) : (
+            <a
+              href="/profile"
+              className="px-4 py-3 rounded-full bg-white text-black text-sm font-medium flex items-center gap-2 hover:bg-gray-200"
+              title="Upload resume in Profile"
+            >
+              <IconAlertCircle size={16} />
+              <span>Add resume</span>
+            </a>
+          )}
+
           <button
             onClick={toggleVideo}
             className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 ${

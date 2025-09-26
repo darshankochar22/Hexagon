@@ -10,7 +10,7 @@ class LLMStreamer {
   }
 
   // Connect to LLM video/audio analysis
-  async connectVideoAnalysis(sessionId, userId) {
+  async connectVideoAnalysis(sessionId) {
     this.sessionId = sessionId;
     const wsUrl = `ws://localhost:8000/media/llm/stream/${sessionId}`;
 
@@ -40,8 +40,24 @@ class LLMStreamer {
     });
   }
 
+  // Send interview context (job description, resume, candidate meta)
+  sendInterviewContext(contextPayload) {
+    if (!this.llmWebSocket || this.llmWebSocket.readyState !== WebSocket.OPEN) {
+      console.warn("LLM socket not open; cannot send context yet");
+      return;
+    }
+
+    const message = {
+      type: "context",
+      timestamp: new Date().toISOString(),
+      ...contextPayload,
+    };
+
+    this.llmWebSocket.send(JSON.stringify(message));
+  }
+
   // Connect to LLM screen analysis
-  async connectScreenAnalysis(sessionId, userId) {
+  async connectScreenAnalysis(sessionId) {
     this.sessionId = sessionId;
     const wsUrl = `ws://localhost:8000/media/llm/screen/${sessionId}`;
 
