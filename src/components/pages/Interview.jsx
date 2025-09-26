@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { 
   IconVideo, 
@@ -9,7 +9,9 @@ import {
   IconScreenShareOff,
   IconChartBar,
   IconFileText,
-  IconAlertCircle
+  IconAlertCircle,
+  IconClock,
+  IconArrowRight
 } from '@tabler/icons-react'
 import Chat from '../Chat'
 import LLMStreamer from '../../utils/llmStreamer'
@@ -37,10 +39,22 @@ const Interview = () => {
   const [llmInsights, setLlmInsights] = useState([])
   const [streamingStatus, setStreamingStatus] = useState('')
   
+  // Interview flow states
+  const [interviewPhase, setInterviewPhase] = useState('setup') // 'setup', 'interviewing', 'completed'
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [interviewQuestions, setInterviewQuestions] = useState([])
+  const [timeRemaining, setTimeRemaining] = useState(30)
+  const [isTimerRunning, setIsTimerRunning] = useState(false)
+  const [aiResponse, setAiResponse] = useState('')
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false)
+  
   const videoRef = useRef(null)
   const screenRef = useRef(null)
   const llmStreamerRef = useRef(null)
   const streamingIntervalRef = useRef(null)
+  const timerRef = useRef(null)
+  const localStreamRef = useRef(null)
+  const screenStreamRef = useRef(null)
 
   // Fetch jobs and resume meta
   useEffect(() => {
@@ -79,6 +93,7 @@ const Interview = () => {
         audio: true
       })
       setLocalStream(stream)
+      localStreamRef.current = stream
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -120,6 +135,7 @@ const Interview = () => {
       })
       
       setScreenStream(screenStream)
+      screenStreamRef.current = screenStream
       setIsScreenSharing(true)
       
       setTimeout(() => {
@@ -141,9 +157,10 @@ const Interview = () => {
 
   // Stop screen sharing
   const stopScreenShare = () => {
-    if (screenStream) {
-      screenStream.getTracks().forEach(track => track.stop())
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop())
       setScreenStream(null)
+      screenStreamRef.current = null
       setIsScreenSharing(false)
     }
   }
@@ -279,6 +296,151 @@ const Interview = () => {
     }
   }
 
+  // Initialize AI interviewer session
+  const initializeAIInterviewer = async () => {
+    if (!selectedJob) {
+      alert('Please select a job first')
+      return
+    }
+
+    setIsGeneratingResponse(true)
+    setAiResponse('Initializing AI interviewer...')
+
+    try {
+      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+      const resumeBase64 = await fetchResumeBase64()
+      
+      const response = await fetch('http://localhost:8000/llm/initialize-interviewer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          job_description: selectedJob.description,
+          job_title: selectedJob.title,
+          job_company: selectedJob.company,
+          job_skills: selectedJob.skills,
+          resume_base64: resumeBase64,
+          user_id: user?.id || 'anonymous'
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setAiResponse(data.ai_response || 'AI interviewer ready! Let\'s begin the interview.')
+        setInterviewQuestions([{ question: "Ready to start", category: "Setup", time_limit: 30 }])
+      } else {
+        throw new Error('Failed to initialize interviewer')
+      }
+    } catch (error) {
+      console.error('Error initializing interviewer:', error)
+      setAiResponse('Error initializing interviewer. Please try again.')
+    } finally {
+      setIsGeneratingResponse(false)
+    }
+  }
+
+  // Generate next question dynamically
+  const generateNextQuestion = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+      const resumeBase64 = await fetchResumeBase64()
+      
+      const response = await fetch('http://localhost:8000/llm/generate-next-question', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          job_description: selectedJob.description,
+          job_title: selectedJob.title,
+          job_company: selectedJob.company,
+          job_skills: selectedJob.skills,
+          resume_base64: resumeBase64,
+          user_id: user?.id || 'anonymous',
+          current_question_index: currentQuestionIndex,
+          total_questions: 5,
+          previous_questions: interviewQuestions.slice(0, currentQuestionIndex).map(q => q.question),
+          llm_insights: llmInsights.slice(-3) // Last 3 insights for context
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const newQuestion = {
+          question: data.question,
+          category: data.category || 'General',
+          time_limit: 30
+        }
+        
+        setInterviewQuestions(prev => [...prev, newQuestion])
+        setAiResponse(data.ai_response || '')
+        return newQuestion
+      } else {
+        throw new Error('Failed to generate next question')
+      }
+    } catch (error) {
+      console.error('Error generating next question:', error)
+      setAiResponse('Error generating question. Please try again.')
+      return null
+    }
+  }, [selectedJob, currentQuestionIndex, interviewQuestions, llmInsights, user?.id])
+
+  // Start interview
+  const startInterview = async () => {
+    if (interviewQuestions.length === 0) {
+      alert('Please initialize interviewer first')
+      return
+    }
+    
+    setInterviewPhase('interviewing')
+    setCurrentQuestionIndex(0)
+    setTimeRemaining(30)
+    setIsTimerRunning(true)
+    setAiResponse('')
+    
+    // Generate first question
+    await generateNextQuestion()
+  }
+
+  // Skip to next question
+  const nextQuestion = async () => {
+    if (isTimerRunning) {
+      setIsTimerRunning(false)
+    }
+    
+    if (currentQuestionIndex < 4) { // 0-4 for 5 questions total
+      const nextIndex = currentQuestionIndex + 1
+      setCurrentQuestionIndex(nextIndex)
+      setTimeRemaining(30)
+      setIsTimerRunning(true)
+      setAiResponse('')
+      
+      // Generate next question if we don't have it yet
+      if (nextIndex >= interviewQuestions.length) {
+        await generateNextQuestion()
+      }
+    } else {
+      setInterviewPhase('completed')
+      setAiResponse('Interview completed! Thank you for your time.')
+    }
+  }
+
+  // Reset interview
+  const resetInterview = () => {
+    setInterviewPhase('setup')
+    setCurrentQuestionIndex(0)
+    setInterviewQuestions([])
+    setTimeRemaining(30)
+    setIsTimerRunning(false)
+    setAiResponse('')
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+    }
+  }
+
   // Start screen share LLM analysis
   const startScreenAnalysis = async () => {
     if (!screenStream) {
@@ -311,6 +473,47 @@ const Interview = () => {
     }
   }
 
+  // Handle time up for current question
+  const handleTimeUp = useCallback(async () => {
+    setIsTimerRunning(false)
+    setAiResponse('Time\'s up! Let\'s proceed to the next question.')
+    
+    setTimeout(async () => {
+      if (currentQuestionIndex < 4) { // 0-4 for 5 questions total
+        const nextIndex = currentQuestionIndex + 1
+        setCurrentQuestionIndex(nextIndex)
+        setTimeRemaining(30)
+        setIsTimerRunning(true)
+        setAiResponse('')
+        
+        // Generate next question if we don't have it yet
+        if (nextIndex >= interviewQuestions.length) {
+          await generateNextQuestion()
+        }
+      } else {
+        setInterviewPhase('completed')
+        setAiResponse('Interview completed! Thank you for your time.')
+      }
+    }, 2000)
+  }, [currentQuestionIndex, interviewQuestions.length, generateNextQuestion])
+
+  // Timer effect
+  useEffect(() => {
+    if (isTimerRunning && timeRemaining > 0) {
+      timerRef.current = setTimeout(() => {
+        setTimeRemaining(timeRemaining - 1)
+      }, 1000)
+    } else if (timeRemaining === 0 && isTimerRunning) {
+      handleTimeUp()
+    }
+    
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+    }
+  }, [isTimerRunning, timeRemaining, handleTimeUp])
+
   // When a job is selected from dropdown, set selectedJob
   useEffect(() => {
     if (!selectedJobId) {
@@ -326,11 +529,11 @@ const Interview = () => {
     startCamera()
     
     return () => {
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop())
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop())
       }
-      if (screenStream) {
-        screenStream.getTracks().forEach(track => track.stop())
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(track => track.stop())
       }
       if (llmStreamerRef.current) {
         llmStreamerRef.current.cleanup()
@@ -338,8 +541,11 @@ const Interview = () => {
       if (streamingIntervalRef.current) {
         clearInterval(streamingIntervalRef.current)
       }
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
     }
-  }, [])
+  }, []) // Empty dependency array to prevent re-running
 
   return (
     <div className="bg-black text-white pt-32 pb-10 px-10">
@@ -559,6 +765,122 @@ const Interview = () => {
             Analyze Screen
           </button>
         </div>
+
+        {/* Interview Flow Controls */}
+        {interviewPhase === 'setup' && (
+          <div className="flex gap-4 justify-center flex-wrap mb-8">
+            <button
+              onClick={initializeAIInterviewer}
+              disabled={!selectedJob || isGeneratingResponse}
+              className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 ${
+                !selectedJob || isGeneratingResponse
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+              title="Initialize AI interviewer"
+            >
+              {isGeneratingResponse ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Initializing...
+                </>
+              ) : (
+                <>
+                  <IconFileText size={20} />
+                  Initialize Interviewer
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {interviewPhase === 'setup' && interviewQuestions.length > 0 && (
+          <div className="flex gap-4 justify-center flex-wrap mb-8">
+            <button
+              onClick={startInterview}
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 bg-green-600 hover:bg-green-700 text-white"
+              title="Start the interview"
+            >
+              <IconArrowRight size={20} />
+              Start Interview
+            </button>
+            <button
+              onClick={resetInterview}
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 bg-gray-600 hover:bg-gray-700 text-white"
+              title="Reset interview"
+            >
+              Reset
+            </button>
+          </div>
+        )}
+
+        {/* Interview Question Display */}
+        {interviewPhase === 'interviewing' && (
+          <div className="bg-gray-900 rounded-3xl p-6 w-full max-w-4xl mb-8">
+            <div className="text-center mb-6">
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <div className="flex items-center gap-2 text-blue-400">
+                  <IconClock size={20} />
+                  <span className="text-2xl font-bold">{timeRemaining}s</span>
+                </div>
+                <div className="text-sm text-gray-400">
+                  Question {currentQuestionIndex + 1} of {interviewQuestions.length}
+                </div>
+              </div>
+              
+              <div className="w-full bg-gray-700 rounded-full h-2 mb-6">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-1000"
+                  style={{ width: `${((30 - timeRemaining) / 30) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div className="bg-black rounded-2xl p-6 mb-6">
+              <h3 className="text-xl font-semibold mb-4 text-center">Interview Question</h3>
+              <p className="text-lg text-gray-300 text-center leading-relaxed">
+                {interviewQuestions[currentQuestionIndex]?.question || 'Loading question...'}
+              </p>
+            </div>
+
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={nextQuestion}
+                className="flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 bg-blue-600 hover:bg-blue-700 text-white"
+                title="Skip to next question"
+              >
+                <IconArrowRight size={20} />
+                Next Question
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Interview Completed */}
+        {interviewPhase === 'completed' && (
+          <div className="bg-gray-900 rounded-3xl p-6 w-full max-w-4xl mb-8 text-center">
+            <h3 className="text-2xl font-bold mb-4 text-green-400">Interview Completed!</h3>
+            <p className="text-lg text-gray-300 mb-6">Thank you for participating in the interview.</p>
+            <button
+              onClick={resetInterview}
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all duration-300 hover:scale-105 bg-blue-600 hover:bg-blue-700 text-white mx-auto"
+              title="Start a new interview"
+            >
+              Start New Interview
+            </button>
+          </div>
+        )}
+
+        {/* AI Response Display */}
+        {aiResponse && (
+          <div className="bg-gray-900 rounded-2xl p-4 w-full max-w-4xl mb-8">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <span className="text-sm font-medium text-blue-400">AI Interviewer</span>
+            </div>
+            <p className="text-gray-300">{aiResponse}</p>
+          </div>
+        )}
 
         {/* Additional Controls */}
         <div className="flex gap-4 justify-center flex-wrap mb-16">
