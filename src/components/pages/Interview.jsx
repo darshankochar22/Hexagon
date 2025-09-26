@@ -912,45 +912,8 @@ const Interview = () => {
           </div>
         )}
 
-        {/* LLM Insights */}
-        {llmInsights.length > 0 && (
-          <div className="bg-black rounded-3xl p-4 w-full max-w-6xl">
-            <h3 className="text-xl font-bold mb-4 text-center">Real-time Interview Analysis</h3>
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {llmInsights.slice(-10).map((insight, index) => (
-                <div key={index} className="bg-gray-900 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-sm text-blue-400">
-                      {insight.type === 'video_analysis' ? 'Video Analysis' : 
-                       insight.type === 'screen_analysis' ? 'Screen Analysis' : 
-                       insight.type === 'audio_analysis' ? 'Audio Analysis' : 'Analysis'}
-                    </h4>
-                    <span className="text-xs text-gray-400">
-                      {new Date(insight.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-300 mb-2">
-                    {insight.analysis}
-                  </div>
-                  {insight.insights && insight.insights.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {insight.insights.map((insightTag, tagIndex) => (
-                        <span key={tagIndex} className="px-2 py-1 bg-blue-600 text-xs rounded-full">
-                          {insightTag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {insight.confidence && (
-                    <div className="text-xs text-gray-400 mt-2">
-                      Confidence: {(insight.confidence * 100).toFixed(0)}%
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* LLM Insights - Hidden from UI but still running in background */}
+        {/* Analysis data is still being collected and sent to backend/chatbot */}
       </div>
     </div>
   )
