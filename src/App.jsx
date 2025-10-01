@@ -4,7 +4,6 @@ import Header from './components/Header/Header.jsx'
 import { GlowingEffectDemo } from './components/GlowingEffectDemo.jsx'
 import About from './components/pages/About.jsx'
 import Jobs from './components/pages/Jobs.jsx'
-import Interview from './components/pages/Interview.jsx'
 import Login from './components/pages/Login.jsx'
 import Signup from './components/pages/Signup.jsx'
 import Profile from './components/pages/Profile.jsx'
@@ -54,7 +53,6 @@ function App() {
           <Route index element={<Header />} />
           <Route path="about" element={<About />} />
           <Route path="jobs" element={<Jobs />} />
-          <Route path="interview" element={<Interview />} />
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
           <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

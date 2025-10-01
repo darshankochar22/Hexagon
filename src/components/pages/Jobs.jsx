@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 import { 
   IconFileText, 
   IconTrash, 
@@ -14,7 +15,7 @@ import {
 } from '@tabler/icons-react'
 import { GlowingEffect } from '../ui/glowing-effect'
 
-const JobCard = ({ job, onDelete, onViewDescription }) => {
+const JobCard = ({ job, role, hasApplied, onApply, onDelete, onViewDescription }) => {
   const getJobIcon = () => {
     if (job.title.toLowerCase().includes('engineer') || job.title.toLowerCase().includes('developer')) {
       return <IconCode className="h-4 w-4 text-white" />
@@ -43,13 +44,15 @@ const JobCard = ({ job, onDelete, onViewDescription }) => {
               <div className="w-fit rounded-lg p-2 bg-black">
                 {getJobIcon()}
               </div>
-              <button
-                onClick={() => onDelete(job.id)}
-                className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
-                title="Delete job"
-              >
-                <IconTrash size={16} />
-              </button>
+              {role === 'hr' && (
+                <button
+                  onClick={() => onDelete(job.id)}
+                  className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
+                  title="Delete job"
+                >
+                  <IconTrash size={16} />
+                </button>
+              )}
             </div>
             
             <div className="space-y-6">
@@ -93,13 +96,30 @@ const JobCard = ({ job, onDelete, onViewDescription }) => {
             </div>
           </div>
           
-                  <button 
-                    onClick={() => onViewDescription(job)}
-                    className="flex items-center justify-center gap-3 bg-black text-white px-6 py-3 rounded-lg hover:bg-white hover:text-black transition-all font-bold text-base"
-                  >
-                    <IconEye size={18} />
-                    View Details
-                  </button>
+                  <div className="flex items-center justify-between gap-3">
+                    <button 
+                      onClick={() => onViewDescription(job)}
+                      className="flex items-center justify-center gap-3 bg-black text-white px-6 py-3 rounded-lg hover:bg-white hover:text-black transition-all font-bold text-base"
+                    >
+                      <IconEye size={18} />
+                      View Details
+                    </button>
+                    {role === 'student' && (
+                      hasApplied(job.id) ? (
+                        <span className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-black text-white border border-white/30" title="Already applied">
+                          <IconFileText size={16} /> Applied
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => onApply(job.id)}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-200 font-bold"
+                          title="Apply to this job"
+                        >
+                          <IconFileText size={16} /> Apply
+                        </button>
+                      )
+                    )}
+                  </div>
         </div>
       </div>
     </li>
@@ -401,16 +421,21 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
 }
 
 const Jobs = () => {
+  const { role, isAuthenticated } = useAuth()
   const [jobs, setJobs] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterLevel, setFilterLevel] = useState('all')
   const [selectedJob, setSelectedJob] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [appliedJobIds, setAppliedJobIds] = useState(new Set())
 
   // Fetch jobs from backend
   useEffect(() => {
     fetchJobs()
-  }, [])
+    if (role === 'student' && isAuthenticated()) {
+      fetchAppliedJobs()
+    }
+  }, [role, isAuthenticated])
 
   const fetchJobs = async () => {
     try {
@@ -440,6 +465,47 @@ const Jobs = () => {
       }
     } catch (error) {
       console.error('Error fetching jobs:', error)
+    }
+  }
+
+  const fetchAppliedJobs = async () => {
+    try {
+      const token = localStorage.getItem('hexagon_token')
+      if (!token) return
+      const response = await fetch('https://backend-ezis.vercel.app/jobs/my/applications', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const ids = new Set((data.applications || []).map(a => a.job?.id || a.job))
+        setAppliedJobIds(ids)
+      }
+    } catch (e) {
+      console.error('Error fetching applied jobs', e)
+    }
+  }
+
+  const hasApplied = (jobId) => appliedJobIds.has(jobId)
+
+  const applyToJob = async (jobId) => {
+    try {
+      const token = localStorage.getItem('hexagon_token')
+      if (!token) return alert('Please login to apply')
+      const res = await fetch(`https://backend-ezis.vercel.app/jobs/${jobId}/apply`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      })
+      if (res.ok) {
+        setAppliedJobIds(prev => new Set(prev).add(jobId))
+        alert('Application submitted')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(err.error || 'Failed to apply')
+      }
+    } catch (e) {
+      console.error('Apply error', e)
+      alert('Error applying')
     }
   }
 
@@ -538,14 +604,16 @@ const Jobs = () => {
                       </select>
                     </div>
 
-                    {/* Add Job Button */}
-                    <button
-                      onClick={() => setShowAddModal(true)}
-                      className="flex items-center gap-3 px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-bold"
-                    >
-                      <IconPlus size={20} />
-                      Add Job
-                    </button>
+                    {/* Add Job Button - HR only */}
+                    {role === 'hr' && (
+                      <button
+                        onClick={() => setShowAddModal(true)}
+                        className="flex items-center gap-3 px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-bold"
+                      >
+                        <IconPlus size={20} />
+                        Add Job
+                      </button>
+                    )}
                   </div>
 
           {/* Jobs Grid with Uniform Layout */}
@@ -555,6 +623,9 @@ const Jobs = () => {
                 <JobCard 
                   key={job.id}
                   job={job} 
+                  role={role}
+                  hasApplied={hasApplied}
+                  onApply={applyToJob}
                   onDelete={deleteJob}
                   onViewDescription={(job) => setSelectedJob(job)}
                 />
