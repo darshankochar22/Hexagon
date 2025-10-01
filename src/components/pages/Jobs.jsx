@@ -666,19 +666,13 @@ const Jobs = () => {
   }
 
   const handleJobAdded = (newJob) => {
-    // Convert backend format to frontend format
-    const formattedJob = {
-      id: newJob.id,
-      title: newJob.title,
-      company: newJob.company,
-      location: newJob.location,
-      experience: newJob.experience,
-      skills: newJob.skills,
-      uploadedAt: new Date(newJob.created_at).toISOString().split('T')[0],
-      status: 'active',
-      description: newJob.description
+    // Backend already returns a formatted job with `uploadedAt`
+    // Use it directly and avoid reformatting non-existent `created_at`
+    const safeJob = {
+      ...newJob,
+      uploadedAt: newJob.uploadedAt || new Date().toISOString().split('T')[0],
     }
-    setJobs(prev => [formattedJob, ...prev])
+    setJobs(prev => [safeJob, ...prev])
   }
 
   const filteredJobs = jobs.filter(job => {
