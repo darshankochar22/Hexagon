@@ -61,10 +61,10 @@ const Interview = () => {
     const load = async () => {
       try {
         setLoadingJobs(true)
-        const jobsResp = await fetch('http://localhost:8000/jobs/')
+        const jobsResp = await fetch('https://backend-ezis.vercel.app/jobs/')
         if (jobsResp.ok) {
-          const jobsJson = await jobsResp.json()
-          setJobs(jobsJson)
+          const data = await jobsResp.json()
+          setJobs(data.jobs || [])
         }
       } catch (e) {
         console.error('Failed to load jobs', e)

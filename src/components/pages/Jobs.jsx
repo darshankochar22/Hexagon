@@ -197,7 +197,7 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
     setIsSubmitting(true)
 
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('hexagon_token')
       const headers = {
         'Content-Type': 'application/json'
       }
@@ -207,13 +207,10 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch('http://localhost:8000/jobs/', {
+      const response = await fetch('https://backend-ezis.vercel.app/jobs/', {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          ...formData,
-          user_id: localStorage.getItem('userId') || 'admin'
-        })
+        body: JSON.stringify(formData)
       })
 
       if (response.ok) {
@@ -417,7 +414,7 @@ const Jobs = () => {
 
   const fetchJobs = async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('hexagon_token')
       const headers = {
         'Content-Type': 'application/json'
       }
@@ -427,26 +424,15 @@ const Jobs = () => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch('http://localhost:8000/jobs/', {
+      const response = await fetch('https://backend-ezis.vercel.app/jobs/', {
         headers
       })
       
       if (response.ok) {
-        const jobsData = await response.json()
-        console.log('Jobs fetched successfully:', jobsData)
-        // Convert backend data to frontend format
-        const formattedJobs = jobsData.map(job => ({
-          id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          experience: job.experience,
-          skills: job.skills,
-          uploadedAt: new Date(job.created_at).toISOString().split('T')[0],
-          status: 'active',
-          description: job.description
-        }))
-        setJobs(formattedJobs)
+        const data = await response.json()
+        console.log('Jobs fetched successfully:', data)
+        // Use the jobs array from the response
+        setJobs(data.jobs || [])
       } else {
         console.error('Failed to fetch jobs:', response.status, response.statusText)
         const errorText = await response.text()
@@ -462,7 +448,7 @@ const Jobs = () => {
     if (!confirm('Are you sure you want to delete this job?')) return
 
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('hexagon_token')
       const headers = {
         'Content-Type': 'application/json'
       }
@@ -472,7 +458,7 @@ const Jobs = () => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch(`http://localhost:8000/jobs/${jobId}`, {
+      const response = await fetch(`https://backend-ezis.vercel.app/jobs/${jobId}`, {
         method: 'DELETE',
         headers
       })
