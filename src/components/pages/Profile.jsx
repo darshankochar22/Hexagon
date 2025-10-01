@@ -9,6 +9,7 @@ const Profile = () => {
   const [editedProfile, setEditedProfile] = useState({})
   const [saving, setSaving] = useState(false)
   const [uploadingResume, setUploadingResume] = useState(false)
+  const [resumeError, setResumeError] = useState('')
   const [saveError, setSaveError] = useState('')
   const initializedRef = useRef(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -62,6 +63,38 @@ const Profile = () => {
     document.body.appendChild(element)
     element.click()
     document.body.removeChild(element)
+  }
+
+  const formatDate = (value) => {
+    try {
+      if (!value) return 'Unknown';
+      const d = new Date(value)
+      if (Number.isNaN(d.getTime())) return 'Unknown'
+      return d.toLocaleDateString()
+    } catch { return 'Unknown' }
+  }
+
+  const formatSizeMB = (value) => {
+    if (!value || typeof value !== 'number') return 'Unknown'
+    return (value / 1024 / 1024).toFixed(2) + ' MB'
+  }
+
+  const viewResumeInline = async () => {
+    try {
+      setResumeError('')
+      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+      const response = await fetch(API_CONFIG.getApiUrl('/users/download-resume'), { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+      if (!response.ok) {
+        const text = await response.text().catch(()=>'')
+        throw new Error(text || 'Failed to open resume')
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      setTimeout(()=>window.URL.revokeObjectURL(url), 60_000)
+    } catch (e) {
+      setResumeError(e.message || 'Failed to open resume')
+    }
   }
 
   const saveProfileNow = async (nextProfile) => {
@@ -227,22 +260,13 @@ const Profile = () => {
                     <div className="flex items-center gap-4 p-4 bg-black rounded-lg">
                       <IconFileText size={24} className="text-white" />
                       <div className="flex-1">
-                        <p className="text-white font-medium">{user.profile.resume.filename}</p>
-                        <p className="text-gray-400 text-sm">Uploaded: {new Date(user.profile.resume.uploaded_at).toLocaleDateString()}</p>
-                        <p className="text-gray-400 text-sm">Size: {(user.profile.resume.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                        <p className="text-white font-medium">{user.profile.resume.filename || 'Resume'}</p>
+                        <p className="text-gray-400 text-sm">Uploaded: {formatDate(user.profile.resume.uploaded_at)}</p>
+                        <p className="text-gray-400 text-sm">Size: {formatSizeMB(user.profile.resume.file_size)}</p>
                       </div>
                     </div>
                     <div className="flex gap-3">
-                      <button onClick={async () => {
-                        const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                        const response = await fetch(API_CONFIG.getApiUrl('/users/download-resume'), { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
-                        if (response.ok) {
-                          const blob = await response.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url; a.download = user.profile.resume.filename || 'resume.pdf'; document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); document.body.removeChild(a);
-                        }
-                      }} className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium">Download</button>
+                      <button onClick={viewResumeInline} className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium">View</button>
                       <button onClick={async () => {
                         if (!confirm('Delete resume?')) return
                         const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
@@ -250,6 +274,7 @@ const Profile = () => {
                         await refreshUser()
                       }} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium">Delete</button>
                     </div>
+                    {resumeError && (<p className="text-red-400 text-sm">{resumeError}</p>)}
                   </div>
                 ) : (
                   <div className="text-center py-8">
@@ -259,14 +284,26 @@ const Profile = () => {
                       <IconUpload size={18} />
                       Upload Resume
                       <input type="file" accept=".pdf,.doc,.docx" onChange={async (e) => {
-                        const file = e.target.files?.[0]; if (!file) return; setUploadingResume(true);
+                        const file = e.target.files?.[0]; if (!file) return; setUploadingResume(true); setResumeError('');
+                        if (file.size > 10 * 1024 * 1024) { setResumeError('Maximum size is 10MB'); setUploadingResume(false); return; }
                         const formData = new FormData(); formData.append('resume', file);
                         const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                        await fetch(API_CONFIG.getApiUrl('/users/upload-resume'), { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
-                        await refreshUser(); setUploadingResume(false); e.target.value = '';
+                        try {
+                          const res = await fetch(API_CONFIG.getApiUrl('/users/upload-resume'), { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
+                          if (!res.ok) {
+                            const text = await res.text().catch(()=> 'Upload failed')
+                            throw new Error(text)
+                          }
+                          await refreshUser();
+                        } catch (err) {
+                          setResumeError(err.message || 'Upload failed')
+                        } finally {
+                          setUploadingResume(false); e.target.value = '';
+                        }
                       }} className="hidden" />
                     </label>
                     {uploadingResume && (<p className="text-white mt-2">Uploading...</p>)}
+                    {resumeError && (<p className="text-red-400 text-sm mt-2">{resumeError}</p>)}
                   </div>
                 )}
               </div>
