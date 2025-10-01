@@ -214,57 +214,59 @@ const Profile = () => {
               </div>
             </div>
 
-            {/* Resume Section */}
-            <div className="bg-black rounded-2xl p-8 mb-8">
-              <h2 className="text-2xl font-bold text-white mb-6">Resume</h2>
-              {user.profile?.resume ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4 p-4 bg-black rounded-lg">
-                    <IconFileText size={24} className="text-white" />
-                    <div className="flex-1">
-                      <p className="text-white font-medium">{user.profile.resume.filename}</p>
-                      <p className="text-gray-400 text-sm">Uploaded: {new Date(user.profile.resume.uploaded_at).toLocaleDateString()}</p>
-                      <p className="text-gray-400 text-sm">Size: {(user.profile.resume.file_size / 1024 / 1024).toFixed(2)} MB</p>
+            {/* Resume Section - hidden for HR accounts */}
+            {user.role === 'hr' ? null : (
+              <div className="bg-black rounded-2xl p-8 mb-8">
+                <h2 className="text-2xl font-bold text-white mb-6">Resume</h2>
+                {user.profile?.resume ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4 p-4 bg-black rounded-lg">
+                      <IconFileText size={24} className="text-white" />
+                      <div className="flex-1">
+                        <p className="text-white font-medium">{user.profile.resume.filename}</p>
+                        <p className="text-gray-400 text-sm">Uploaded: {new Date(user.profile.resume.uploaded_at).toLocaleDateString()}</p>
+                        <p className="text-gray-400 text-sm">Size: {(user.profile.resume.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <button onClick={async () => {
+                        const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+                        const response = await fetch('http://localhost:8000/users/download-resume', { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+                        if (response.ok) {
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url; a.download = user.profile.resume.filename || 'resume.pdf'; document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); document.body.removeChild(a);
+                        }
+                      }} className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium">Download</button>
+                      <button onClick={async () => {
+                        if (!confirm('Delete resume?')) return
+                        const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+                        await fetch('http://localhost:8000/users/delete-resume', { method: 'DELETE', headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+                        await refreshUser()
+                      }} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium">Delete</button>
                     </div>
                   </div>
-                  <div className="flex gap-3">
-                    <button onClick={async () => {
-                      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                      const response = await fetch('http://localhost:8000/users/download-resume', { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
-                      if (response.ok) {
-                        const blob = await response.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url; a.download = user.profile.resume.filename || 'resume.pdf'; document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); document.body.removeChild(a);
-                      }
-                    }} className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium">Download</button>
-                    <button onClick={async () => {
-                      if (!confirm('Delete resume?')) return
-                      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                      await fetch('http://localhost:8000/users/delete-resume', { method: 'DELETE', headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
-                      await refreshUser()
-                    }} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium">Delete</button>
+                ) : (
+                  <div className="text-center py-8">
+                    <IconFileText size={48} className="text-white mx-auto mb-4" />
+                    <p className="text-white text-lg mb-4">No resume uploaded</p>
+                    <label className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium cursor-pointer">
+                      <IconUpload size={18} />
+                      Upload Resume
+                      <input type="file" accept=".pdf,.doc,.docx" onChange={async (e) => {
+                        const file = e.target.files?.[0]; if (!file) return; setUploadingResume(true);
+                        const formData = new FormData(); formData.append('resume', file);
+                        const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+                        await fetch('http://localhost:8000/users/upload-resume', { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
+                        await refreshUser(); setUploadingResume(false); e.target.value = '';
+                      }} className="hidden" />
+                    </label>
+                    {uploadingResume && (<p className="text-white mt-2">Uploading...</p>)}
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <IconFileText size={48} className="text-white mx-auto mb-4" />
-                  <p className="text-white text-lg mb-4">No resume uploaded</p>
-                  <label className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium cursor-pointer">
-                    <IconUpload size={18} />
-                    Upload Resume
-                    <input type="file" accept=".pdf,.doc,.docx" onChange={async (e) => {
-                      const file = e.target.files?.[0]; if (!file) return; setUploadingResume(true);
-                      const formData = new FormData(); formData.append('file', file);
-                      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                      await fetch('http://localhost:8000/users/upload-resume', { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
-                      await refreshUser(); setUploadingResume(false); e.target.value = '';
-                    }} className="hidden" />
-                  </label>
-                  {uploadingResume && (<p className="text-white mt-2">Uploading...</p>)}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Interview Reports Section */}
             <div className="profile-section bg-black rounded-2xl p-8 mb-8">
