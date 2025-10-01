@@ -86,6 +86,12 @@ const Profile = () => {
       const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
       const response = await fetch(API_CONFIG.getApiUrl('/users/download-resume'), { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('No resume found. Please upload one first.')
+        }
+        if (response.status === 401) {
+          throw new Error('Session expired. Please log in again.')
+        }
         const text = await response.text().catch(()=>'')
         throw new Error(text || 'Failed to open resume')
       }
