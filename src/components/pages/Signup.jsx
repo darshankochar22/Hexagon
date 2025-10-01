@@ -9,6 +9,7 @@ const Signup = () => {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('student')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -27,7 +28,7 @@ const Signup = () => {
     try {
       // For Node.js backend, send JSON with username, email, and password
       const requestBody = API_CONFIG.BACKEND === 'nodejs' 
-        ? JSON.stringify({ username, email, password })
+        ? JSON.stringify({ username, email, password, role })
         : new URLSearchParams({ username, password }).toString();
       
       const headers = API_CONFIG.BACKEND === 'nodejs'
@@ -135,6 +136,17 @@ const Signup = () => {
             }}>
               Password must be at least 6 characters with uppercase, lowercase, and number
             </p>
+          </div>
+
+          <div>
+            <select
+              className="auth-input"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            >
+              <option value="student">Student</option>
+              <option value="hr">HR</option>
+            </select>
           </div>
           
           <div className="auth-actions">
