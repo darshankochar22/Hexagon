@@ -9,7 +9,7 @@ export const BACKEND_OPTIONS = {
   },
   DEPLOYED: {
     name: "Deployed (Vercel)",
-    url: "https://backend-ezis.vercel.app",
+    url: "https://backend-six-pi-23.vercel.app",
     status: "production",
   },
   LOCAL_FASTAPI: {

@@ -8,7 +8,7 @@ const API_CONFIG = {
   // Backend URLs
   FASTAPI_URL: "http://localhost:8000",
   NODEJS_URL: "http://localhost:5003",
-  DEPLOYED_URL: "https://backend-ezis.vercel.app",
+  DEPLOYED_URL: "https://backend-six-pi-23.vercel.app",
 
   // Get current backend URL
   getCurrentBackendUrl: () => {
