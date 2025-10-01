@@ -115,7 +115,9 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      <div data-role={role || 'guest'}>
+        {children}
+      </div>
     </AuthContext.Provider>
   )
 }
