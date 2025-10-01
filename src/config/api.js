@@ -3,7 +3,7 @@
 
 const API_CONFIG = {
   // Backend selection: 'fastapi', 'nodejs', or 'deployed'
-  BACKEND: "deployed", // Options: "fastapi", "nodejs", "deployed"
+  BACKEND: "nodejs", // Options: "fastapi", "nodejs", "deployed"
 
   // Backend URLs
   FASTAPI_URL: "http://localhost:8000",
