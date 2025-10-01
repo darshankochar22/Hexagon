@@ -10,6 +10,7 @@ const Login = () => {
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleRole, setGoogleRole] = useState('student')
 
   // Redirect to profile if already authenticated
   useEffect(() => {
@@ -66,7 +67,7 @@ const Login = () => {
 
   const loginWithGoogle = async () => {
     try {
-      const response = await fetch(API_CONFIG.getApiUrl('/auth/google/url'))
+      const response = await fetch(API_CONFIG.getApiUrl(`/auth/google/url?role=${encodeURIComponent(googleRole)}`))
       const data = await response.json()
       if (data.url) {
         window.location.href = data.url
@@ -131,6 +132,16 @@ const Login = () => {
           </div>
           
           <div className="auth-actions">
+            <div>
+              <select
+                className="auth-input"
+                value={googleRole}
+                onChange={(e) => setGoogleRole(e.target.value)}
+              >
+                <option value="student">Sign in as Student</option>
+                <option value="hr">Sign in as HR</option>
+              </select>
+            </div>
             <button 
               className="btn-full" 
               type="submit" 

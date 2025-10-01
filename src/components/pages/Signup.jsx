@@ -72,7 +72,7 @@ const Signup = () => {
 
   const signupWithGoogle = async () => {
     try {
-      const response = await fetch(API_CONFIG.getApiUrl('/auth/google/url'))
+      const response = await fetch(API_CONFIG.getApiUrl(`/auth/google/url?role=${encodeURIComponent(role)}`))
       const data = await response.json()
       if (data.url) {
         window.location.href = data.url
