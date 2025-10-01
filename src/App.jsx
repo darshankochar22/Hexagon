@@ -49,8 +49,8 @@ function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Layout />}>
-          {/* Header component should be the full-screen hero section */}
-          <Route index element={<Header />} />
+          {/* Home: blank black opening without Header */}
+          <Route index element={<div style={{minHeight: '50vh'}}></div>} />
           <Route path="about" element={<About />} />
           <Route path="jobs" element={<Jobs />} />
           <Route path="login" element={<Login />} />
