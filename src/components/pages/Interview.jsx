@@ -424,7 +424,7 @@ const Interview = () => {
       }
     } else {
       setInterviewPhase('completed')
-      setAiResponse('Interview completed! Thank you for your time.')
+      await generateInterviewSummary()
     }
   }
 
@@ -473,6 +473,40 @@ const Interview = () => {
     }
   }
 
+  // Generate interview summary
+  const generateInterviewSummary = async () => {
+    try {
+      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+      
+      const response = await fetch('http://localhost:8000/media/generate-interview-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          user_id: user?.id || 'anonymous',
+          session_id: sessionId,
+          job_title: selectedJob?.title || '',
+          job_company: selectedJob?.company || '',
+          interview_questions: interviewQuestions,
+          llm_insights: llmInsights,
+          chat_history: [] // You can add chat history if needed
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setAiResponse(`Interview completed! Detailed summary generated and stored. Summary: ${data.summary.substring(0, 200)}...`)
+      } else {
+        setAiResponse('Interview completed! Thank you for your time.')
+      }
+    } catch (error) {
+      console.error('Error generating summary:', error)
+      setAiResponse('Interview completed! Thank you for your time.')
+    }
+  }
+
   // Handle time up for current question
   const handleTimeUp = useCallback(async () => {
     setIsTimerRunning(false)
@@ -492,10 +526,10 @@ const Interview = () => {
         }
       } else {
         setInterviewPhase('completed')
-        setAiResponse('Interview completed! Thank you for your time.')
+        await generateInterviewSummary()
       }
     }, 2000)
-  }, [currentQuestionIndex, interviewQuestions.length, generateNextQuestion])
+  }, [currentQuestionIndex, interviewQuestions.length, generateNextQuestion, selectedJob, sessionId, llmInsights, user?.id])
 
   // Timer effect
   useEffect(() => {

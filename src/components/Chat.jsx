@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { IconSend, IconUser } from '@tabler/icons-react'
+import { IconSend, IconUser, IconMicrophone } from '@tabler/icons-react'
 
 const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, insights }) => {
   const [comments, setComments] = useState([
@@ -19,12 +19,239 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [voiceLanguage, setVoiceLanguage] = useState('en-US')
   const [voiceEngine, setVoiceEngine] = useState('standard') // 'standard' | 'neural' | 'generative'
+  
+  // Speech-to-Text states
+  // STT state
+  const [isProcessingSTT, setIsProcessingSTT] = useState(false)
+  const [isAutoListening, setIsAutoListening] = useState(false)
+  const continuousStreamRef = useRef(null)
+  const speechDetectionTimeoutRef = useRef(null)
+  const audioContextRef = useRef(null)
+  const analyserRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
 
   const stopSpeaking = () => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
+    // Resume auto listening after TTS stops
+    if (isAutoListening) {
+      setTimeout(() => {
+        if (isAutoListening) {
+          startAutoListening()
+        }
+      }, 1000)
+    }
   }
+
+  // Auto-start listening when component mounts
+  useEffect(() => {
+    const startAutoListeningOnMount = async () => {
+      // Wait a bit for component to fully load
+      setTimeout(async () => {
+        try {
+          await startAutoListening()
+        } catch (error) {
+          console.log('Auto-listening not available:', error.message)
+        }
+      }, 2000)
+    }
+
+    startAutoListeningOnMount()
+
+    // Cleanup on unmount
+    return () => {
+      stopAutoListening()
+    }
+  }, [])
+
+  // Auto listening function - no button required
+  const startAutoListening = async () => {
+    try {
+      console.log('🎤 Starting automatic listening...')
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      console.log('✅ Microphone access granted for auto-listening')
+      continuousStreamRef.current = stream
+      setIsAutoListening(true)
+
+      // Create audio context for real-time analysis
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+      audioContextRef.current = audioContext
+      console.log('✅ Audio context created for auto-listening')
+      
+      const analyser = audioContext.createAnalyser()
+      analyserRef.current = analyser
+      
+      const microphone = audioContext.createMediaStreamSource(stream)
+      microphone.connect(analyser)
+      console.log('✅ Microphone connected to analyser for auto-listening')
+
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.8
+      const bufferLength = analyser.frequencyBinCount
+      const dataArray = new Uint8Array(bufferLength)
+      console.log('✅ Auto-listening setup complete')
+
+      let isRecording = false
+      let lastSpeechTime = 0
+      const SILENCE_THRESHOLD = 1500 // 1.5 seconds of silence to stop recording
+      const SPEECH_THRESHOLD = 20 // Lower threshold for auto-detection
+      
+      // Try different audio formats in order of preference
+      let mimeType = 'audio/wav'
+      if (!MediaRecorder.isTypeSupported('audio/wav')) {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus'
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm'
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4'
+        } else {
+          mimeType = 'audio/webm' // fallback
+        }
+      }
+      console.log('🎵 Auto-listening using audio format:', mimeType)
+
+      const detectSpeech = () => {
+        if (!isAutoListening) return
+
+        analyser.getByteFrequencyData(dataArray)
+        const average = dataArray.reduce((a, b) => a + b) / bufferLength
+        const currentTime = Date.now()
+
+        // Debug logging every 5 seconds for auto-listening
+        if (currentTime % 5000 < 100) {
+          console.log(`🔊 Auto-listening - Audio level: ${average.toFixed(2)}, Threshold: ${SPEECH_THRESHOLD}, Recording: ${isRecording}`)
+        }
+
+        if (average > SPEECH_THRESHOLD) {
+          // Speech detected
+          lastSpeechTime = currentTime
+          console.log(`🎤 Auto-detected speech! Level: ${average.toFixed(2)}`)
+          
+          if (!isRecording) {
+            // Start recording
+            isRecording = true
+            audioChunksRef.current = []
+            
+            mediaRecorderRef.current = new MediaRecorder(stream, {
+              mimeType: mimeType
+            })
+
+            mediaRecorderRef.current.ondataavailable = (event) => {
+              if (event.data.size > 0) {
+                audioChunksRef.current.push(event.data)
+                console.log(`📦 Auto-recording chunk: ${event.data.size} bytes`)
+              }
+            }
+
+            mediaRecorderRef.current.onstop = async () => {
+              console.log(`🛑 Auto-recording stopped, processing ${audioChunksRef.current.length} chunks`)
+              if (audioChunksRef.current.length > 0) {
+                const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
+                console.log(`🎵 Auto-recording blob: ${audioBlob.size} bytes`)
+                await processAudioWithWhisper(audioBlob, mimeType)
+              }
+              isRecording = false
+            }
+
+            mediaRecorderRef.current.start(100) // Collect data every 100ms
+            console.log('🎤 Auto-recording started')
+          }
+        } else if (isRecording && (currentTime - lastSpeechTime) > SILENCE_THRESHOLD) {
+          // Silence detected, stop recording
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop()
+            console.log('🔇 Auto-recording stopped - silence detected')
+          }
+        }
+
+        requestAnimationFrame(detectSpeech)
+      }
+
+      detectSpeech()
+
+    } catch (error) {
+      console.error('Error starting auto-listening:', error)
+      // Don't show alert for auto-listening, just log it
+      console.log('Auto-listening not available - user can still type messages')
+    }
+  }
+
+  // Stop auto listening
+  const stopAutoListening = () => {
+    console.log('🔇 Stopping auto-listening')
+    setIsAutoListening(false)
+    
+    if (continuousStreamRef.current) {
+      continuousStreamRef.current.getTracks().forEach(track => track.stop())
+      continuousStreamRef.current = null
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    }
+    
+    if (speechDetectionTimeoutRef.current) {
+      clearTimeout(speechDetectionTimeoutRef.current)
+    }
+  }
+
+
+  // Process audio with Whisper STT
+  const processAudioWithWhisper = async (audioBlob, mimeType = 'audio/wav') => {
+    console.log('🎯 Starting STT processing...')
+    setIsProcessingSTT(true)
+    
+    try {
+      const formData = new FormData()
+      let filename = 'recording.wav'
+      if (mimeType.includes('webm')) {
+        filename = 'recording.webm'
+      } else if (mimeType.includes('mp4')) {
+        filename = 'recording.mp4'
+      }
+      formData.append('audio', audioBlob, filename)
+      console.log('📤 Sending audio to backend...', audioBlob.size, 'bytes')
+
+      const response = await fetch('http://localhost:8000/media/speech-to-text', {
+        method: 'POST',
+        body: formData
+      })
+
+      console.log('📡 Backend response status:', response.status)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('✅ Backend response:', data)
+        const transcribedText = data.text || ''
+        
+        if (transcribedText.trim()) {
+          console.log('🎯 Transcribed text:', transcribedText)
+          // Auto-send the transcribed text
+          setInputMessage(transcribedText)
+          await handleSendMessage(transcribedText)
+        } else {
+          console.log('⚠️ No transcribed text received')
+        }
+      } else {
+        const errorText = await response.text()
+        console.error('❌ Backend error:', errorText)
+        throw new Error(`STT processing failed: ${response.status} - ${errorText}`)
+      }
+    } catch (error) {
+      console.error('❌ Error processing audio:', error)
+    } finally {
+      setIsProcessingSTT(false)
+    }
+  }
+
 
   const speakWithPuter = async (text) => {
     try {
@@ -32,6 +259,12 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
   
       if (!("speechSynthesis" in window)) {
         throw new Error("Browser does not support SpeechSynthesis API")
+      }
+
+      // Pause auto listening during TTS
+      const wasAutoListening = isAutoListening
+      if (wasAutoListening) {
+        stopAutoListening()
       }
   
       const maxLen = 2500
@@ -83,6 +316,13 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
       } else {
         console.warn('No audio chunks were spoken')
       }
+
+      // Resume auto listening after TTS completes
+      if (wasAutoListening) {
+        setTimeout(() => {
+          startAutoListening()
+        }, 1000) // Wait 1 second after TTS ends
+      }
     } catch (error) {
       console.error('TTS Error:', error)
     }
@@ -98,19 +338,20 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
     scrollToBottom()
   }, [comments])
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return
+  const handleSendMessage = async (messageText = null) => {
+    const messageToSend = messageText || inputMessage
+    if (!messageToSend.trim()) return
 
     const userComment = {
       id: comments.length + 1,
-      text: inputMessage,
+      text: messageToSend,
       author: 'You',
       timestamp: new Date(),
       isAI: false
     }
 
     setComments(prev => [...prev, userComment])
-    setChatHistory(prev => [...prev, { role: 'user', content: inputMessage }])
+    setChatHistory(prev => [...prev, { role: 'user', content: messageToSend }])
     setInputMessage('')
     setShowInput(false)
     setIsTyping(true)
@@ -155,7 +396,7 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
 
       const payload = {
         session_id: sessionId || null,
-        messages: chatHistory.concat([{ role: 'user', content: userComment.text }]),
+        messages: chatHistory.concat([{ role: 'user', content: messageToSend }]),
         selected_job: selectedJob || null,
         all_jobs: (allJobs || []).map(j => ({
           id: j.id,
@@ -295,15 +536,30 @@ const Chat = ({ selectedJob, allJobs, resumeMeta, fetchResumeBase64, sessionId, 
       {/* Comment Input - Retweet Style */}
       <div className="flex flex-col items-center gap-3 w-full max-w-4xl">
         {showInput && (
+          <div className="w-full flex items-center gap-2">
           <input
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Type your question..."
-            className="w-full p-3 bg-black border border-white rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-gray-300"
+              className="flex-1 p-3 bg-black border border-white rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-gray-300"
             autoFocus
           />
+            {/* Auto-listening status indicator */}
+            <div className="flex items-center gap-2">
+              {isProcessingSTT ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : isAutoListening ? (
+                <div className="w-5 h-5 bg-green-500 rounded-full animate-pulse" title="Auto-listening active"></div>
+              ) : (
+                <div className="w-5 h-5 bg-gray-500 rounded-full" title="Auto-listening inactive"></div>
+              )}
+              <span className="text-xs text-gray-400">
+                {isProcessingSTT ? 'Processing...' : isAutoListening ? 'Listening' : 'Offline'}
+              </span>
+            </div>
+          </div>
         )}
         {/* Voice controls */}
         <div className="w-full max-w-4xl flex flex-wrap items-center justify-between gap-3">

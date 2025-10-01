@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { IconUpload, IconDownload, IconTrash, IconFileText } from '@tabler/icons-react'
+import { IconUpload, IconDownload, IconTrash, IconFileText, IconCalendar, IconBuilding, IconEye } from '@tabler/icons-react'
 import { GlowingEffect } from '../ui/glowing-effect'
 
 const Profile = () => {
@@ -11,6 +11,12 @@ const Profile = () => {
   const [saveError, setSaveError] = useState('')
   const initializedRef = useRef(false)
   const [isEditing, setIsEditing] = useState(false)
+  
+  // Interview reports state
+  const [interviewReports, setInterviewReports] = useState([])
+  const [loadingReports, setLoadingReports] = useState(false)
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [showReportModal, setShowReportModal] = useState(false)
 
   useEffect(() => {
     if (!initializedRef.current && user?.profile) {
@@ -18,6 +24,44 @@ const Profile = () => {
       initializedRef.current = true
     }
   }, [user])
+
+  // Fetch interview reports
+  const fetchInterviewReports = async () => {
+    if (!user?.id) return
+    
+    setLoadingReports(true)
+    try {
+      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+      const response = await fetch(`http://localhost:8000/media/interview-summaries/${user.id}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setInterviewReports(data.summaries || [])
+      }
+    } catch (error) {
+      console.error('Error fetching interview reports:', error)
+    } finally {
+      setLoadingReports(false)
+    }
+  }
+
+  // Load reports when component mounts
+  useEffect(() => {
+    fetchInterviewReports()
+  }, [user?.id])
+
+  // Download report as PDF
+  const downloadReport = (report) => {
+    const element = document.createElement('a')
+    const file = new Blob([report.detailed_summary], { type: 'text/plain' })
+    element.href = URL.createObjectURL(file)
+    element.download = `interview-report-${report.job_title}-${new Date(report.created_at).toISOString().split('T')[0]}.txt`
+    document.body.appendChild(element)
+    element.click()
+    document.body.removeChild(element)
+  }
 
   const saveProfileNow = async (nextProfile) => {
     setSaving(true)
@@ -50,7 +94,7 @@ const Profile = () => {
         try {
           const errorData = await response.json()
           serverMessage = errorData.detail || serverMessage
-        } catch (_) {
+        } catch {
           const text = await response.text()
           serverMessage = text || serverMessage
         }
@@ -78,26 +122,6 @@ const Profile = () => {
     setSaveError('')
   }
 
-  // Helper: fetch resume file as base64 for LLM parsing
-  const fetchResumeBase64 = async () => {
-    try {
-      const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-      const resp = await fetch('http://localhost:8000/users/download-resume', {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      })
-      if (!resp.ok) return null
-      const blob = await resp.blob()
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result.split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-    } catch (e) {
-      console.error('Failed to fetch resume base64', e)
-      return null
-    }
-  }
 
   if (!user) {
     return (
@@ -242,6 +266,79 @@ const Profile = () => {
               )}
             </div>
 
+            {/* Interview Reports Section */}
+            <div className="profile-section bg-black rounded-2xl p-8 mb-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-white">Interview Reports</h3>
+                <button 
+                  onClick={fetchInterviewReports}
+                  className="text-blue-400 hover:text-blue-300 text-sm"
+                >
+                  Refresh
+                </button>
+              </div>
+              
+              {loadingReports ? (
+                <div className="text-center py-8">
+                  <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-white">Loading reports...</p>
+                </div>
+              ) : interviewReports.length > 0 ? (
+                <div className="space-y-4">
+                  {interviewReports.map((report, index) => (
+                    <div key={report._id || index} className="bg-gray-900 rounded-lg p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <IconBuilding size={20} className="text-blue-400" />
+                            <h4 className="text-white font-semibold text-lg">{report.job_title}</h4>
+                          </div>
+                          <div className="flex items-center gap-4 text-gray-400 text-sm">
+                            <div className="flex items-center gap-1">
+                              <IconCalendar size={16} />
+                              <span>{new Date(report.created_at).toLocaleDateString()}</span>
+                            </div>
+                            <span>•</span>
+                            <span>{report.job_company}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedReport(report)
+                              setShowReportModal(true)
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                          >
+                            <IconEye size={16} />
+                            View
+                          </button>
+                          <button
+                            onClick={() => downloadReport(report)}
+                            className="flex items-center gap-2 px-3 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                          >
+                            <IconDownload size={16} />
+                            Download
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-gray-300 text-sm">
+                        <p className="line-clamp-3">
+                          {report.detailed_summary?.substring(0, 200)}...
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <IconFileText size={48} className="text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-400 text-lg mb-2">No interview reports yet</p>
+                  <p className="text-gray-500 text-sm">Complete an interview to see your detailed reports here</p>
+                </div>
+              )}
+            </div>
+
             <div className="profile-details">
               <div className="profile-section bg-black rounded-2xl p-8 mb-8">
                 <h3 className="text-xl font-bold text-white mb-6">Contact Information</h3>
@@ -313,6 +410,49 @@ const Profile = () => {
           </div>
         </div>
       </div>
+
+      {/* Report View Modal */}
+      {showReportModal && selectedReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-black rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-2xl font-bold text-white mb-2">{selectedReport.job_title}</h3>
+                <div className="flex items-center gap-4 text-gray-400">
+                  <div className="flex items-center gap-1">
+                    <IconBuilding size={16} />
+                    <span>{selectedReport.job_company}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <IconCalendar size={16} />
+                    <span>{new Date(selectedReport.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => downloadReport(selectedReport)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <IconDownload size={16} />
+                  Download
+                </button>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-[60vh] pr-2">
+              <div className="text-white whitespace-pre-wrap leading-relaxed">
+                {selectedReport.detailed_summary}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

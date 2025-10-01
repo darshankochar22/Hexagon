@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import API_CONFIG from '../config/api.js'
 
 const AuthContext = createContext()
 
@@ -28,7 +29,7 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUserProfile = async (authToken) => {
     try {
-      const response = await fetch('http://localhost:8000/users/me', {
+      const response = await fetch(API_CONFIG.getApiUrl('/users/me'), {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'

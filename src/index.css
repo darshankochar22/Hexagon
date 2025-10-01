@@ -45,16 +45,16 @@ html, body, #root {
 /* Auth pages */
 .auth-page { min-height: 70vh; display: grid; place-items: center; padding: 40px 20px; }
 .auth-card {
-  width: min(420px, 92vw);
+  width: min(480px, 92vw);
   background: #000000;
   color: #ffffff;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
-  padding: 24px;
+  padding: 32px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.5);
 }
 .auth-title { font-size: 1.5rem; margin: 0 0 12px 0; }
-.auth-form { display: grid; gap: 12px; }
+.auth-form { display: grid; gap: 16px; }
 .auth-input {
   width: 100%;
   background: #000000;
@@ -64,7 +64,7 @@ html, body, #root {
   padding: 10px 12px;
 }
 .auth-input::placeholder { color: #bdbdbd; }
-.auth-actions { display: grid; gap: 10px; margin-top: 8px; }
+.auth-actions { display: grid; gap: 12px; margin-top: 12px; }
 .btn-full { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.22); }
 .btn-primary-filled { background: #ffffff; color: #000000; border-color: transparent; }
 .btn-google { display: inline-flex; justify-content: center; align-items: center; gap: 8px; }
