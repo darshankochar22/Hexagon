@@ -84,7 +84,9 @@ const Profile = () => {
     try {
       setResumeError('')
       const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-      const response = await fetch(API_CONFIG.getApiUrl('/users/download-resume'), { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+      // Cache-busting query to avoid 304 cached responses when replacing resume
+      const urlWithTs = API_CONFIG.getApiUrl(`/users/download-resume?_=${Date.now()}`)
+      const response = await fetch(urlWithTs, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('No resume found. Please upload one first.')

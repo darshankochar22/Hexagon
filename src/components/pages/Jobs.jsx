@@ -238,7 +238,7 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch('https://backend-ezis.vercel.app/jobs/', {
+      const response = await fetch(API_CONFIG.getApiUrl('/jobs/'), {
         method: 'POST',
         headers,
         body: JSON.stringify(formData)
@@ -509,7 +509,11 @@ const Jobs = () => {
 
   // Fetch jobs from backend
   useEffect(() => {
-    fetchJobs()
+    if (role === 'hr' && isAuthenticated()) {
+      fetchMyJobs()
+    } else {
+      fetchJobs()
+    }
     if (role === 'student' && isAuthenticated()) {
       fetchAppliedJobs()
     }
@@ -543,6 +547,26 @@ const Jobs = () => {
       }
     } catch (error) {
       console.error('Error fetching jobs:', error)
+    }
+  }
+
+  const fetchMyJobs = async () => {
+    try {
+      const token = localStorage.getItem('hexagon_token')
+      if (!token) return
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+      const response = await fetch(API_CONFIG.getApiUrl('/jobs/my/jobs'), { headers })
+      if (response.ok) {
+        const data = await response.json()
+        setJobs(data.jobs || [])
+      } else {
+        console.error('Failed to fetch my jobs:', response.status, response.statusText)
+      }
+    } catch (e) {
+      console.error('Error fetching my jobs', e)
     }
   }
 
