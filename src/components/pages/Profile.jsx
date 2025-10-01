@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import API_CONFIG from '../../config/api'
 import { IconUpload, IconDownload, IconTrash, IconFileText, IconCalendar, IconBuilding, IconEye } from '@tabler/icons-react'
 import { GlowingEffect } from '../ui/glowing-effect'
 
@@ -80,7 +81,7 @@ const Profile = () => {
         return acc
       }, {})
 
-      const response = await fetch('http://localhost:8000/users/me', {
+      const response = await fetch(API_CONFIG.getApiUrl('/users/me'), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -234,7 +235,7 @@ const Profile = () => {
                     <div className="flex gap-3">
                       <button onClick={async () => {
                         const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                        const response = await fetch('http://localhost:8000/users/download-resume', { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+                        const response = await fetch(API_CONFIG.getApiUrl('/users/download-resume'), { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
                         if (response.ok) {
                           const blob = await response.blob();
                           const url = window.URL.createObjectURL(blob);
@@ -245,7 +246,7 @@ const Profile = () => {
                       <button onClick={async () => {
                         if (!confirm('Delete resume?')) return
                         const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                        await fetch('http://localhost:8000/users/delete-resume', { method: 'DELETE', headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+                        await fetch(API_CONFIG.getApiUrl('/users/delete-resume'), { method: 'DELETE', headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
                         await refreshUser()
                       }} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium">Delete</button>
                     </div>
@@ -261,7 +262,7 @@ const Profile = () => {
                         const file = e.target.files?.[0]; if (!file) return; setUploadingResume(true);
                         const formData = new FormData(); formData.append('resume', file);
                         const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-                        await fetch('http://localhost:8000/users/upload-resume', { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
+                        await fetch(API_CONFIG.getApiUrl('/users/upload-resume'), { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
                         await refreshUser(); setUploadingResume(false); e.target.value = '';
                       }} className="hidden" />
                     </label>
