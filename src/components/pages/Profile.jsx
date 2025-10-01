@@ -272,14 +272,18 @@ const Profile = () => {
             {(user.role || role) === 'hr' ? null : (
               <div className="bg-black rounded-2xl p-8 mb-8">
                 <h2 className="text-2xl font-bold text-white mb-6">Resume</h2>
-                {user.profile?.resume ? (
+                {(() => { const r = (user.studentProfile && user.studentProfile.resume) || user.profile?.resume; return !!r; })() ? (
                   <div className="space-y-4">
                     <div className="flex items-center gap-4 p-4 bg-black rounded-lg">
                       <IconFileText size={24} className="text-white" />
                       <div className="flex-1">
-                        <p className="text-white font-medium">{user.profile.resume.filename || 'Resume'}</p>
-                        <p className="text-gray-400 text-sm">Uploaded: {formatDate(user.profile.resume.uploaded_at)}</p>
-                        <p className="text-gray-400 text-sm">Size: {formatSizeMB(user.profile.resume.file_size)}</p>
+                        {(() => { const r = (user.studentProfile && user.studentProfile.resume) || user.profile?.resume; return (
+                          <>
+                            <p className="text-white font-medium">{r?.filename || 'Resume'}</p>
+                            <p className="text-gray-400 text-sm">Uploaded: {formatDate(r?.uploaded_at)}</p>
+                            <p className="text-gray-400 text-sm">Size: {formatSizeMB(r?.file_size)}</p>
+                          </>
+                        )})()}
                       </div>
                     </div>
                     <div className="flex gap-3 items-center">
