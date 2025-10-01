@@ -276,8 +276,30 @@ const Profile = () => {
                         <p className="text-gray-400 text-sm">Size: {formatSizeMB(user.profile.resume.file_size)}</p>
                       </div>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 items-center">
                       <button onClick={viewResumeInline} className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium">View</button>
+                      {/* Replace/Upload button visible even when resume exists */}
+                      <label className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium cursor-pointer">
+                        Replace
+                        <input type="file" accept=".pdf,.doc,.docx" onChange={async (e) => {
+                          const file = e.target.files?.[0]; if (!file) return; setUploadingResume(true); setResumeError('');
+                          if (file.size > 10 * 1024 * 1024) { setResumeError('Maximum size is 10MB'); setUploadingResume(false); return; }
+                          const formData = new FormData(); formData.append('resume', file);
+                          const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
+                          try {
+                            const res = await fetch(API_CONFIG.getApiUrl('/users/upload-resume'), { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: formData })
+                            if (!res.ok) {
+                              const text = await res.text().catch(()=> 'Upload failed')
+                              throw new Error(text)
+                            }
+                            await refreshUser();
+                          } catch (err) {
+                            setResumeError(err.message || 'Upload failed')
+                          } finally {
+                            setUploadingResume(false); e.target.value = '';
+                          }
+                        }} className="hidden" />
+                      </label>
                       <button onClick={async () => {
                         if (!confirm('Delete resume?')) return
                         const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
