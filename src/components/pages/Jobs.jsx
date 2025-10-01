@@ -259,10 +259,9 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
         })
         alert('Job added successfully!')
       } else {
-        console.error('Failed to add job:', response.status, response.statusText)
-        const errorText = await response.text()
-        console.error('Error response:', errorText)
-        alert('Failed to add job')
+        const text = await response.text().catch(() => '')
+        console.error('Error adding job:', response.status, response.statusText, text)
+        alert(text || `Failed to add job (${response.status}) - ensure you are logged in as HR`)
       }
     } catch (error) {
       console.error('Error adding job:', error)
