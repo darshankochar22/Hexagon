@@ -28,6 +28,11 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   const fetchUserProfile = async (authToken) => {
+    if (!authToken) {
+      setLoading(false)
+      return
+    }
+    
     try {
       const response = await fetch(API_CONFIG.getApiUrl('/users/me'), {
         headers: {
@@ -39,10 +44,18 @@ export const AuthProvider = ({ children }) => {
       if (response.ok) {
         const userData = await response.json()
         setUser(userData)
-      } else {
-        // Token is invalid, remove it
+      } else if (response.status === 401) {
+        // Token is invalid or expired, remove it
+        console.log('Token expired or invalid, logging out')
         localStorage.removeItem('hexagon_token')
         setToken(null)
+        setUser(null)
+      } else {
+        // Other error
+        console.error('Failed to fetch user profile:', response.status, response.statusText)
+        localStorage.removeItem('hexagon_token')
+        setToken(null)
+        setUser(null)
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error)
