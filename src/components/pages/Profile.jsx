@@ -22,7 +22,8 @@ const Profile = () => {
 
   useEffect(() => {
     if (!initializedRef.current && user?.profile) {
-      setEditedProfile(user.profile)
+      // include email so it is editable and sent to backend
+      setEditedProfile({ ...user.profile, email: user.email })
       initializedRef.current = true
     }
   }, [user])
@@ -107,12 +108,15 @@ const Profile = () => {
         localStorage.getItem('jwt')
       if (!token) throw new Error('No authentication token found')
 
-      // Only send fields accepted by backend schema; exclude nested objects like resume
-      const allowedFields = ['email', 'full_name', 'avatar', 'bio', 'location', 'website', 'phone']
-      const payload = allowedFields.reduce((acc, key) => {
-        if (nextProfile[key] !== undefined) acc[key] = nextProfile[key]
-        return acc
-      }, {})
+      // Build payload matching backend schema: { email?, profile: { ... } }
+      const profileKeys = ['full_name', 'avatar', 'bio', 'location', 'website', 'phone']
+      const profilePayload = {}
+      profileKeys.forEach((k) => {
+        if (nextProfile[k] !== undefined) profilePayload[k] = nextProfile[k]
+      })
+      const payload = {}
+      if (nextProfile.email !== undefined) payload.email = nextProfile.email
+      if (Object.keys(profilePayload).length > 0) payload.profile = profilePayload
 
       const response = await fetch(API_CONFIG.getApiUrl('/users/me'), {
         method: 'PUT',
@@ -151,7 +155,7 @@ const Profile = () => {
   }
 
   const handleCancel = () => {
-    setEditedProfile(user?.profile || {})
+    setEditedProfile({ ...(user?.profile || {}), email: user?.email })
     setIsEditing(false)
     setSaveError('')
   }
@@ -402,7 +406,7 @@ const Profile = () => {
                     {isEditing ? (
                       <input type="email" value={editedProfile.email || ''} onChange={(e) => handleInputChange('email', e.target.value)} className="w-full px-4 py-3 bg-black rounded-lg text-white placeholder-gray-400 focus:outline-none" placeholder="Enter email" />
                     ) : (
-                      <p className="text-white">{user.profile?.email || 'Not provided'}</p>
+                      <p className="text-white">{user.email || 'Not provided'}</p>
                     )}
                   </div>
                   <div className="space-y-2">
