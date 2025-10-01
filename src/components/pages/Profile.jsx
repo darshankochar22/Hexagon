@@ -112,10 +112,13 @@ const Profile = () => {
       const profileKeys = ['full_name', 'avatar', 'bio', 'location', 'website', 'phone']
       const profilePayload = {}
       profileKeys.forEach((k) => {
-        if (nextProfile[k] !== undefined) profilePayload[k] = nextProfile[k]
+        const val = nextProfile[k]
+        if (val !== undefined && !(typeof val === 'string' && val.trim() === '')) {
+          profilePayload[k] = val
+        }
       })
       const payload = {}
-      if (nextProfile.email !== undefined) payload.email = nextProfile.email
+      if (nextProfile.email !== undefined && nextProfile.email.trim() !== '') payload.email = nextProfile.email.trim()
       if (Object.keys(profilePayload).length > 0) payload.profile = profilePayload
 
       const response = await fetch(API_CONFIG.getApiUrl('/users/me'), {
@@ -131,12 +134,16 @@ const Profile = () => {
         let serverMessage = 'Failed to update profile'
         try {
           const errorData = await response.json()
-          serverMessage = errorData.detail || serverMessage
+          if (errorData?.details && Array.isArray(errorData.details)) {
+            serverMessage = errorData.details.map(d => d.msg).join(', ')
+          } else {
+            serverMessage = errorData.error || errorData.message || errorData.detail || serverMessage
+          }
         } catch {
           const text = await response.text()
           serverMessage = text || serverMessage
         }
-        throw new Error(`${response.status} ${response.statusText} - ${serverMessage}`)
+        throw new Error(`${serverMessage}`)
       }
 
       await refreshUser()
