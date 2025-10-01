@@ -4,7 +4,7 @@ import { IconUpload, IconDownload, IconTrash, IconFileText, IconCalendar, IconBu
 import { GlowingEffect } from '../ui/glowing-effect'
 
 const Profile = () => {
-  const { user, logout, refreshUser } = useAuth()
+  const { user, role, logout, refreshUser } = useAuth()
   const [editedProfile, setEditedProfile] = useState({})
   const [saving, setSaving] = useState(false)
   const [uploadingResume, setUploadingResume] = useState(false)
@@ -165,9 +165,12 @@ const Profile = () => {
                     <h1 className="text-3xl font-bold text-white mb-2">{user.profile?.full_name || user.username}</h1>
                   )}
                   <p className="text-xl text-white mb-4">@{user.username}</p>
-                  <div className="profile-provider">
+                  <div className="profile-provider flex items-center gap-2 justify-center md:justify-start flex-wrap">
                     <span className="px-3 py-1 bg-white text-black rounded-full text-sm font-medium">
                       {user.provider === 'google' ? 'Google Account' : 'Local Account'}
+                    </span>
+                    <span className="px-3 py-1 rounded-full text-sm font-medium border border-white/20">
+                      {(user.role || role || 'guest').toUpperCase()}
                     </span>
                   </div>
                 </div>
@@ -215,7 +218,7 @@ const Profile = () => {
             </div>
 
             {/* Resume Section - hidden for HR accounts */}
-            {user.role === 'hr' ? null : (
+            {(user.role || role) === 'hr' ? null : (
               <div className="bg-black rounded-2xl p-8 mb-8">
                 <h2 className="text-2xl font-bold text-white mb-6">Resume</h2>
                 {user.profile?.resume ? (
@@ -265,6 +268,17 @@ const Profile = () => {
                     {uploadingResume && (<p className="text-white mt-2">Uploading...</p>)}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* HR Quick Actions and Profile Section */}
+            {(user.role || role) === 'hr' && (
+              <div className="bg-black rounded-2xl p-8 mb-8">
+                <h2 className="text-2xl font-bold text-white mb-4">HR Dashboard</h2>
+                <p className="text-white/80 mb-6">Manage postings and review applicants. Your Jobs page lists only jobs you posted; each card has an Applicants button with candidate details and resume downloads.</p>
+                <div className="flex gap-3">
+                  <a href="/jobs" className="px-5 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium">Go to Jobs</a>
+                </div>
               </div>
             )}
 
