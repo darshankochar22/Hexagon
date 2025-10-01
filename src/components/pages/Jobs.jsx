@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import API_CONFIG from '../../config/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { 
   IconFileText, 
@@ -526,7 +527,7 @@ const Jobs = () => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch('https://backend-ezis.vercel.app/jobs/', {
+      const response = await fetch(API_CONFIG.getApiUrl('/jobs/'), {
         headers
       })
       
@@ -549,7 +550,7 @@ const Jobs = () => {
     try {
       const token = localStorage.getItem('hexagon_token')
       if (!token) return
-      const response = await fetch('https://backend-ezis.vercel.app/jobs/my/applications', {
+      const response = await fetch(API_CONFIG.getApiUrl('/jobs/my/applications'), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (response.ok) {
@@ -568,7 +569,7 @@ const Jobs = () => {
     try {
       const token = localStorage.getItem('hexagon_token')
       if (!token) return alert('Please login to apply')
-      const res = await fetch(`https://backend-ezis.vercel.app/jobs/${jobId}/apply`, {
+      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${jobId}/apply`), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -590,7 +591,7 @@ const Jobs = () => {
     try {
       const token = localStorage.getItem('hexagon_token')
       if (!token) return
-      const res = await fetch(`https://backend-ezis.vercel.app/jobs/${job.id}/applicants`, {
+      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${job.id}/applicants`), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (res.ok) {
@@ -611,7 +612,7 @@ const Jobs = () => {
     try {
       const token = localStorage.getItem('hexagon_token')
       if (!token || !applicantsJob) return
-      const res = await fetch(`https://backend-ezis.vercel.app/jobs/${applicantsJob.id}/applicants/${applicationId}/resume`, {
+      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${applicantsJob.id}/applicants/${applicationId}/resume`), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (!res.ok) {
@@ -648,7 +649,7 @@ const Jobs = () => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch(`https://backend-ezis.vercel.app/jobs/${jobId}`, {
+      const response = await fetch(API_CONFIG.getApiUrl(`/jobs/${jobId}`), {
         method: 'DELETE',
         headers
       })
