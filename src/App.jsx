@@ -61,7 +61,7 @@ function App() {
           <Route path="todos" element={<ProtectedRoute><TodoList /></ProtectedRoute>} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="tts-test" element={<TTSTest />} />
-          <Route path="*" element={<></>} />
+          <Route path="*" element={<div className="text-center p-8"><h1>404 - Page Not Found</h1></div>} />
         </Route>
       </Routes>
     </AuthProvider>
