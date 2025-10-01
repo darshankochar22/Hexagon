@@ -11,11 +11,12 @@ import {
   IconCode,
   IconUsers,
   IconPlus,
-  IconX
+  IconX,
+  IconUser
 } from '@tabler/icons-react'
 import { GlowingEffect } from '../ui/glowing-effect'
 
-const JobCard = ({ job, role, hasApplied, onApply, onDelete, onViewDescription }) => {
+const JobCard = ({ job, role, hasApplied, onApply, onDelete, onViewDescription, onViewApplicants }) => {
   const getJobIcon = () => {
     if (job.title.toLowerCase().includes('engineer') || job.title.toLowerCase().includes('developer')) {
       return <IconCode className="h-4 w-4 text-white" />
@@ -45,13 +46,22 @@ const JobCard = ({ job, role, hasApplied, onApply, onDelete, onViewDescription }
                 {getJobIcon()}
               </div>
               {role === 'hr' && (
-                <button
-                  onClick={() => onDelete(job.id)}
-                  className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
-                  title="Delete job"
-                >
-                  <IconTrash size={16} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onViewApplicants(job)}
+                    className="px-3 py-2 text-black bg-white rounded-lg hover:bg-gray-200 transition-colors text-sm font-bold"
+                    title="View applicants"
+                  >
+                    Applicants
+                  </button>
+                  <button
+                    onClick={() => onDelete(job.id)}
+                    className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
+                    title="Delete job"
+                  >
+                    <IconTrash size={16} />
+                  </button>
+                </div>
               )}
             </div>
             
@@ -420,6 +430,70 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
   )
 }
 
+const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume }) => {
+  if (!isOpen || !job) return null
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
+      <div className="bg-black rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto border border-white/15">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Applicants</h2>
+            <p className="text-white/80 text-sm mt-1">{job.title} — {job.company}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
+            title="Close"
+          >
+            <IconX size={22} />
+          </button>
+        </div>
+
+        {(!applicants || applicants.length === 0) ? (
+          <div className="text-center py-16">
+            <IconUser size={42} className="mx-auto text-white mb-4" />
+            <p className="text-white">No applications yet</p>
+          </div>
+        ) : (
+          <ul className="space-y-4">
+            {applicants.map((app) => (
+              <li key={app.id} className="border border-white/10 rounded-lg p-4 bg-black">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-white font-semibold">
+                      <IconUser size={16} />
+                      <span>{app.user?.profile?.full_name || app.user?.username || 'Candidate'}</span>
+                    </div>
+                    <div className="text-white/80 text-sm">
+                      {app.user?.email}
+                    </div>
+                    <div className="text-white/60 text-sm">Applied: {new Date(app.appliedAt).toLocaleString()}</div>
+                    {app.coverLetter && (
+                      <div className="text-white/80 text-sm mt-2 whitespace-pre-wrap">{app.coverLetter}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {app.resume?.has_file ? (
+                      <button
+                        onClick={() => onDownloadResume(app.id)}
+                        className="px-3 py-2 bg-white text-black rounded-lg hover:bg-gray-200 text-sm font-bold"
+                      >
+                        Download Resume
+                      </button>
+                    ) : (
+                      <span className="px-3 py-2 border border-white/20 rounded-lg text-white/70 text-sm">No Resume</span>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const Jobs = () => {
   const { role, isAuthenticated } = useAuth()
   const [jobs, setJobs] = useState([])
@@ -428,6 +502,9 @@ const Jobs = () => {
   const [selectedJob, setSelectedJob] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [appliedJobIds, setAppliedJobIds] = useState(new Set())
+  const [showApplicantsModal, setShowApplicantsModal] = useState(false)
+  const [applicantsJob, setApplicantsJob] = useState(null)
+  const [applicants, setApplicants] = useState([])
 
   // Fetch jobs from backend
   useEffect(() => {
@@ -506,6 +583,53 @@ const Jobs = () => {
     } catch (e) {
       console.error('Apply error', e)
       alert('Error applying')
+    }
+  }
+
+  const openApplicants = async (job) => {
+    try {
+      const token = localStorage.getItem('hexagon_token')
+      if (!token) return
+      const res = await fetch(`https://backend-ezis.vercel.app/jobs/${job.id}/applicants`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setApplicants(data.applicants || [])
+        setApplicantsJob(job)
+        setShowApplicantsModal(true)
+      } else {
+        alert('Failed to load applicants')
+      }
+    } catch (e) {
+      console.error('Applicants load error', e)
+      alert('Error loading applicants')
+    }
+  }
+
+  const downloadApplicantResume = async (applicationId) => {
+    try {
+      const token = localStorage.getItem('hexagon_token')
+      if (!token || !applicantsJob) return
+      const res = await fetch(`https://backend-ezis.vercel.app/jobs/${applicantsJob.id}/applicants/${applicationId}/resume`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!res.ok) {
+        const t = await res.text()
+        return alert(t || 'Failed to download')
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'resume'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (e) {
+      console.error('Download resume error', e)
+      alert('Error downloading resume')
     }
   }
 
@@ -628,6 +752,7 @@ const Jobs = () => {
                   onApply={applyToJob}
                   onDelete={deleteJob}
                   onViewDescription={(job) => setSelectedJob(job)}
+                  onViewApplicants={openApplicants}
                 />
               )
             })}
@@ -663,6 +788,15 @@ const Jobs = () => {
                   isOpen={showAddModal}
                   onClose={() => setShowAddModal(false)}
                   onJobAdded={handleJobAdded}
+                />
+
+                {/* HR Applicants Modal */}
+                <ApplicantsModal
+                  job={applicantsJob}
+                  applicants={applicants}
+                  isOpen={showApplicantsModal}
+                  onClose={() => setShowApplicantsModal(false)}
+                  onDownloadResume={downloadApplicantResume}
                 />
               </div>
   )
