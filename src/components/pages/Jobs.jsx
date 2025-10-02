@@ -432,7 +432,90 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
   )
 }
 
-const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume, onDeleteApplication }) => {
+const AnalysisViewModal = ({ applicants, isOpen, onClose }) => {
+  if (!isOpen) return null
+  
+  const applicantsWithAnalysis = applicants.filter(app => app.analysis && app.analysis.summary)
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+      <div className="bg-black rounded-2xl p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto border border-white/15">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-white">LLM Analysis Responses</h2>
+          <button
+            onClick={onClose}
+            className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
+            title="Close"
+          >
+            <IconX size={24} />
+          </button>
+        </div>
+        
+        {applicantsWithAnalysis.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-white text-lg">No analysis data available yet.</p>
+            <p className="text-white/70 text-sm mt-2">Run "Analyze All" first to generate LLM responses.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {applicantsWithAnalysis.map((app, index) => (
+              <div key={app.id} className="border border-white/10 rounded-lg p-6 bg-black">
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    {app.user?.profile?.full_name || app.user?.username || `Candidate ${index + 1}`}
+                  </h3>
+                  <div className="text-white/70 text-sm">
+                    <p>Email: {app.user?.email || 'N/A'}</p>
+                    <p>Applied: {new Date(app.appliedAt).toLocaleString()}</p>
+                    <p>Analyzed: {app.analysis.analyzedAt ? new Date(app.analysis.analyzedAt).toLocaleString() : 'N/A'}</p>
+                    <p>Model: {app.analysis.model || 'N/A'}</p>
+                  </div>
+                </div>
+                
+                <div className="bg-black border border-white/20 rounded-lg p-4">
+                  <h4 className="text-white font-semibold mb-3">Full LLM Analysis:</h4>
+                  <div className="text-white/90 whitespace-pre-wrap leading-relaxed">
+                    {app.analysis.summary}
+                  </div>
+                  
+                  {app.analysis.urlsAnalyzed && app.analysis.urlsAnalyzed.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-white/20">
+                      <h5 className="text-white font-semibold mb-2">URLs Analyzed:</h5>
+                      <div className="text-white/70 text-sm">
+                        {app.analysis.urlsAnalyzed.map((url, urlIndex) => (
+                          <div key={urlIndex} className="break-all">
+                            {urlIndex + 1}. {url}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {app.analysis.interviewQuestions && app.analysis.interviewQuestions.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-white/20">
+                      <h5 className="text-white font-semibold mb-3">🎯 AI-Generated Interview Questions:</h5>
+                      <div className="space-y-2">
+                        {app.analysis.interviewQuestions.map((question, qIndex) => (
+                          <div key={qIndex} className="bg-black border border-white/20 rounded-lg p-3">
+                            <div className="text-white/90 text-sm leading-relaxed">
+                              <span className="text-white font-semibold">{qIndex + 1}.</span> {question}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume, onDeleteApplication, onAnalyzeAll, onViewAnalysis }) => {
   if (!isOpen || !job) return null
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
@@ -442,13 +525,33 @@ const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume, o
             <h2 className="text-2xl font-bold text-white">Applicants</h2>
             <p className="text-white/80 text-sm mt-1">{job.title} — {job.company}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
-            title="Close"
-          >
-            <IconX size={22} />
-          </button>
+          <div className="flex items-center gap-2">
+            {applicants && applicants.length > 0 && (
+              <>
+                <button
+                  onClick={onAnalyzeAll}
+                  className="px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 text-sm font-bold"
+                  title="Analyze all resumes with AI"
+                >
+                  Analyze All
+                </button>
+                <button
+                  onClick={onViewAnalysis}
+                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 text-sm font-bold border border-white/20"
+                  title="View full LLM analysis responses"
+                >
+                  View Analysis
+                </button>
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 text-white hover:text-red-500 transition-colors bg-black rounded-lg"
+              title="Close"
+            >
+              <IconX size={22} />
+            </button>
+          </div>
         </div>
 
         {(!applicants || applicants.length === 0) ? (
@@ -487,7 +590,7 @@ const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume, o
                     )}
                     <button
                       onClick={() => onDeleteApplication(app.id)}
-                      className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-bold"
+                      className="px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-800 text-sm font-bold border border-white/20"
                       title="Delete application"
                     >
                       Delete
@@ -514,6 +617,7 @@ const Jobs = () => {
   const [showApplicantsModal, setShowApplicantsModal] = useState(false)
   const [applicantsJob, setApplicantsJob] = useState(null)
   const [applicants, setApplicants] = useState([])
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false)
 
   // Fetch jobs from backend
   useEffect(() => {
@@ -623,25 +727,32 @@ const Jobs = () => {
     }
   }
 
-  const openApplicants = async (job) => {
+  const fetchApplicants = async (jobId) => {
     try {
       const token = localStorage.getItem('hexagon_token')
       if (!token) return
-      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${job.id}/applicants`), {
+      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${jobId}/applicants`), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (res.ok) {
         const data = await res.json()
         setApplicants(data.applicants || [])
-        setApplicantsJob(job)
-        setShowApplicantsModal(true)
+        return data.applicants || []
       } else {
         alert('Failed to load applicants')
+        return []
       }
     } catch (e) {
       console.error('Applicants load error', e)
       alert('Error loading applicants')
+      return []
     }
+  }
+
+  const openApplicants = async (job) => {
+    await fetchApplicants(job.id)
+    setApplicantsJob(job)
+    setShowApplicantsModal(true)
   }
 
   const downloadApplicantResume = async (applicationId) => {
@@ -691,6 +802,37 @@ const Jobs = () => {
       console.error('Delete application error', e)
       alert('Error deleting application')
     }
+  }
+
+  const analyzeAllResumes = async () => {
+    if (!confirm('Analyze all applicant resumes? This may take a few minutes.')) return
+    try {
+      const token = localStorage.getItem('hexagon_token')
+      if (!token || !applicantsJob) return
+      
+      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${applicantsJob.id}/analyze-resumes`), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      if (!res.ok) {
+        const error = await res.text()
+        return alert(error || 'Failed to analyze resumes')
+      }
+      
+      await res.json()
+      
+      alert('Analysis completed! Refreshing applicants...')
+      // Refresh applicants to show the analysis results
+      await fetchApplicants(applicantsJob.id)
+    } catch (e) {
+      console.error('Analyze resumes error', e)
+      alert('Error analyzing resumes')
+    }
+  }
+
+  const viewAnalysis = () => {
+    setShowAnalysisModal(true)
   }
 
 
@@ -852,6 +994,15 @@ const Jobs = () => {
                   onClose={() => setShowApplicantsModal(false)}
                   onDownloadResume={downloadApplicantResume}
                   onDeleteApplication={deleteApplication}
+                  onAnalyzeAll={analyzeAllResumes}
+                  onViewAnalysis={viewAnalysis}
+                />
+
+                {/* Analysis View Modal */}
+                <AnalysisViewModal
+                  applicants={applicants}
+                  isOpen={showAnalysisModal}
+                  onClose={() => setShowAnalysisModal(false)}
                 />
               </div>
   )
