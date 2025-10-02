@@ -8,16 +8,20 @@ const API_CONFIG = {
   // Backend URLs
   FASTAPI_URL: "http://localhost:8000",
   NODEJS_URL: "http://localhost:5003",
-  // Prefer env var if provided (Vite)
-  DEPLOYED_URL:
-    typeof import.meta !== "undefined" &&
-    import.meta.env &&
-    import.meta.env.VITE_API_BASE_URL
-      ? import.meta.env.VITE_API_BASE_URL
-      : "https://backend-1-kohl.vercel.app",
+  // Hardcoded deployed backend URL
+  DEPLOYED_URL: "https://backend-1-kohl.vercel.app",
 
   // Get current backend URL
   getCurrentBackendUrl: () => {
+    // Prefer localhost Node backend when frontend is running on localhost
+    const isLocal =
+      typeof window !== "undefined" &&
+      /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+
+    if (isLocal) {
+      return API_CONFIG.NODEJS_URL;
+    }
+
     switch (API_CONFIG.BACKEND) {
       case "fastapi":
         return API_CONFIG.FASTAPI_URL;
@@ -26,14 +30,18 @@ const API_CONFIG = {
       case "deployed":
         return API_CONFIG.DEPLOYED_URL;
       default:
-        return API_CONFIG.NODEJS_URL;
+        return API_CONFIG.DEPLOYED_URL;
     }
   },
 
   // API endpoints
   getApiUrl: (endpoint) => {
-    const baseUrl = API_CONFIG.getCurrentBackendUrl();
-    return `${baseUrl}${endpoint}`;
+    const baseUrl = (API_CONFIG.getCurrentBackendUrl() || "").replace(
+      /\/+$/,
+      ""
+    );
+    const path = String(endpoint || "").replace(/^\/+/, "");
+    return `${baseUrl}/${path}`;
   },
 
   // Helper to check if using deployed backend

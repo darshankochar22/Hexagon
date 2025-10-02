@@ -432,7 +432,7 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
   )
 }
 
-const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume }) => {
+const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume, onDeleteApplication }) => {
   if (!isOpen || !job) return null
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
@@ -480,11 +480,18 @@ const ApplicantsModal = ({ job, applicants, isOpen, onClose, onDownloadResume })
                         onClick={() => onDownloadResume(app.id)}
                         className="px-3 py-2 bg-white text-black rounded-lg hover:bg-gray-200 text-sm font-bold"
                       >
-                        Download Resume
+                        View Resume
                       </button>
                     ) : (
                       <span className="px-3 py-2 border border-white/20 rounded-lg text-white/70 text-sm">No Resume</span>
                     )}
+                    <button
+                      onClick={() => onDeleteApplication(app.id)}
+                      className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-bold"
+                      title="Delete application"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
               </li>
@@ -641,25 +648,48 @@ const Jobs = () => {
     try {
       const token = localStorage.getItem('hexagon_token')
       if (!token || !applicantsJob) return
-      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${applicantsJob.id}/applicants/${applicationId}/resume`), {
+
+      // Prefer public URL if provided in list payload
+      const app = applicants.find(a => a.id === applicationId)
+      if (app && app.resume && app.resume.public_url) {
+        window.open(app.resume.public_url, '_blank', 'noopener,noreferrer')
+        return
+      }
+
+      // Fallback: request short-lived signed URL from backend
+      const urlRes = await fetch(
+        API_CONFIG.getApiUrl(`/jobs/${applicantsJob.id}/applicants/${applicationId}/resume-url`),
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      )
+      if (!urlRes.ok) {
+        const t = await urlRes.text()
+        return alert(t || 'Failed to generate resume URL')
+      }
+      const { url } = await urlRes.json()
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      console.error('Download resume error', e)
+      alert('Error opening resume')
+    }
+  }
+
+  const deleteApplication = async (applicationId) => {
+    if (!confirm('Delete this application?')) return
+    try {
+      const token = localStorage.getItem('hexagon_token')
+      if (!token || !applicantsJob) return
+      const res = await fetch(API_CONFIG.getApiUrl(`/jobs/${applicantsJob.id}/applicants/${applicationId}`), {
+        method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (!res.ok) {
         const t = await res.text()
-        return alert(t || 'Failed to download')
+        return alert(t || 'Failed to delete application')
       }
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'resume'
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      setApplicants(prev => prev.filter(a => a.id !== applicationId))
     } catch (e) {
-      console.error('Download resume error', e)
-      alert('Error downloading resume')
+      console.error('Delete application error', e)
+      alert('Error deleting application')
     }
   }
 
@@ -821,6 +851,7 @@ const Jobs = () => {
                   isOpen={showApplicantsModal}
                   onClose={() => setShowApplicantsModal(false)}
                   onDownloadResume={downloadApplicantResume}
+                  onDeleteApplication={deleteApplication}
                 />
               </div>
   )

@@ -26,23 +26,15 @@ const Signup = () => {
     setLoading(true)
     
     try {
-      // For Node.js backend, send JSON with username, email, and password
-      const requestBody = API_CONFIG.BACKEND === 'nodejs' 
-        ? JSON.stringify({ username, email, password, role })
-        : new URLSearchParams({ username, password }).toString();
-      
-      const headers = API_CONFIG.BACKEND === 'nodejs'
-        ? { 'Content-Type': 'application/json' }
-        : { 'Content-Type': 'application/x-www-form-urlencoded' };
-
-      const url = API_CONFIG.BACKEND === 'nodejs'
-        ? API_CONFIG.getApiUrl('/auth/signup')
-        : `${API_CONFIG.getApiUrl('/auth/signup')}?${new URLSearchParams({ username, password }).toString()}`;
+      // Always send JSON to Node backend
+      const requestBody = JSON.stringify({ username, email, password, role })
+      const headers = { 'Content-Type': 'application/json' }
+      const url = API_CONFIG.getApiUrl('/auth/signup')
 
       const res = await fetch(url, {
         method: 'POST',
         headers,
-        body: API_CONFIG.BACKEND === 'nodejs' ? requestBody : undefined,
+        body: requestBody,
       })
       const data = await res.json()
       if (!res.ok) {
