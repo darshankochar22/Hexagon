@@ -238,7 +238,9 @@ const AddJobModal = ({ isOpen, onClose, onJobAdded }) => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch(API_CONFIG.getApiUrl('/jobs/'), {
+      const createEndpoint = API_CONFIG.getApiUrl('/jobs/')
+      console.log('POST create job endpoint =', createEndpoint)
+      const response = await fetch(createEndpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(formData)
@@ -530,7 +532,9 @@ const Jobs = () => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch(API_CONFIG.getApiUrl('/jobs/'), {
+      const listEndpoint = API_CONFIG.getApiUrl('/jobs/')
+      console.log('GET jobs endpoint =', listEndpoint)
+      const response = await fetch(listEndpoint, {
         headers
       })
       
@@ -557,7 +561,9 @@ const Jobs = () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       }
-      const response = await fetch(API_CONFIG.getApiUrl('/jobs/my/jobs'), { headers })
+      const myJobsEndpoint = API_CONFIG.getApiUrl('/jobs/my/jobs')
+      console.log('GET my jobs endpoint =', myJobsEndpoint)
+      const response = await fetch(myJobsEndpoint, { headers })
       if (response.ok) {
         const data = await response.json()
         setJobs(data.jobs || [])

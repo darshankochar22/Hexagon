@@ -8,7 +8,13 @@ const API_CONFIG = {
   // Backend URLs
   FASTAPI_URL: "http://localhost:8000",
   NODEJS_URL: "http://localhost:5003",
-  DEPLOYED_URL: "https://backend-six-pi-23.vercel.app",
+  // Prefer env var if provided (Vite)
+  DEPLOYED_URL:
+    typeof import.meta !== "undefined" &&
+    import.meta.env &&
+    import.meta.env.VITE_API_BASE_URL
+      ? import.meta.env.VITE_API_BASE_URL
+      : "https://backend-1-kohl.vercel.app",
 
   // Get current backend URL
   getCurrentBackendUrl: () => {

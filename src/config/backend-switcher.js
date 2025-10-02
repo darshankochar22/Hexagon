@@ -9,7 +9,12 @@ export const BACKEND_OPTIONS = {
   },
   DEPLOYED: {
     name: "Deployed (Vercel)",
-    url: "https://backend-six-pi-23.vercel.app",
+    url:
+      typeof import.meta !== "undefined" &&
+      import.meta.env &&
+      import.meta.env.VITE_API_BASE_URL
+        ? import.meta.env.VITE_API_BASE_URL
+        : "https://backend-1-kohl.vercel.app",
     status: "production",
   },
   LOCAL_FASTAPI: {

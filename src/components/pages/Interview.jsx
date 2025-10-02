@@ -15,6 +15,7 @@ import {
 } from '@tabler/icons-react'
 import Chat from '../Chat'
 import LLMStreamer from '../../utils/llmStreamer'
+import API_CONFIG from '../../config/api'
 
 const Interview = () => {
   const { user } = useAuth()
@@ -61,7 +62,7 @@ const Interview = () => {
     const load = async () => {
       try {
         setLoadingJobs(true)
-        const jobsResp = await fetch('https://backend-ezis.vercel.app/jobs/')
+        const jobsResp = await fetch(API_CONFIG.getApiUrl('/jobs/'))
         if (jobsResp.ok) {
           const data = await jobsResp.json()
           setJobs(data.jobs || [])
@@ -174,7 +175,7 @@ const Interview = () => {
   const fetchResumeBase64 = async () => {
     try {
       const token = localStorage.getItem('hexagon_token') || localStorage.getItem('token') || localStorage.getItem('jwt')
-      const resp = await fetch('http://localhost:8000/users/download-resume', {
+      const resp = await fetch(API_CONFIG.getApiUrl('/users/download-resume'), {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
       if (!resp.ok) return null
