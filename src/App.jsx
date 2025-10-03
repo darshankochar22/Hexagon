@@ -8,6 +8,7 @@ import Login from './components/pages/Login.jsx'
 import Signup from './components/pages/Signup.jsx'
 import Profile from './components/pages/Profile.jsx'
 import Schedule from './components/pages/Schedule.jsx'
+import InterviewFlow from './components/pages/InterviewFlow.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import { AppleCardsCarouselDemo } from './components/ui/Applecards.jsx'
 import TTSTest from './components/TTSTest.jsx'
@@ -58,6 +59,7 @@ function App() {
           <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="todos" element={<ProtectedRoute><TodoList /></ProtectedRoute>} />
           <Route path="schedule" element={<Schedule />} />
+            <Route path="interview" element={<ProtectedRoute><InterviewFlow /></ProtectedRoute>} />
           <Route path="tts-test" element={<TTSTest />} />
           <Route path="*" element={<div className="text-center p-8"><h1>404 - Page Not Found</h1></div>} />
         </Route>
